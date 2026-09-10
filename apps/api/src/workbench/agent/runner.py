@@ -49,6 +49,24 @@ from workbench.tools.registry import ToolRegistry
 
 log = get_logger(__name__)
 
+#: Output allowance for an ordinary structured call — a plan, a judgement.
+DEFAULT_MAX_TOKENS = 1024
+
+#: Output allowance for generating a tool's arguments.
+#:
+#: Far larger than the default because a document *is* the arguments: a report
+#: spec carries its title, every section heading, the prose of each section,
+#: bullet lists and tables, and all of it has to arrive in one JSON object. The
+#: previous 1024 was inherited from the planner, where it is ample, and it cut
+#: the report off mid-string. On a thinking model the allowance is spent on
+#: reasoning first, so nearly six hundred reasoning fragments went by before
+#: the JSON began — leaving nothing for the JSON itself.
+#:
+#: The failure was silent and looked like the wrong thing: "could not produce
+#: valid arguments for this tool", as though the model could not follow the
+#: schema, when it had followed it perfectly and been cut off mid-sentence.
+ARGUMENT_MAX_TOKENS = 6144
+
 MAX_RETRIEVE_LOOPS = 3
 MAX_VALIDATE_LOOPS = 2
 
@@ -623,6 +641,7 @@ class AgentRunner:
                     ],
                     json_schema=schema,
                     state=state,
+                    max_tokens=ARGUMENT_MAX_TOKENS,
                 ),
                 timeout=self.arg_binding_timeout_s,
             )
@@ -634,7 +653,24 @@ class AgentRunner:
 
         try:
             bound = json.loads(result.text)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as exc:
+            # Truncation and malformed output need different words, because
+            # they need different fixes and the operator can only act on the
+            # difference. The text is logged either way: reporting a parse
+            # failure without it makes the next occurrence just as opaque.
+            log.warning(
+                "tool_arguments_unparseable",
+                tool=spec.name,
+                finish_reason=result.finish_reason,
+                chars=len(result.text),
+                error=str(exc),
+                text_tail=result.text[-200:],
+            )
+            if result.finish_reason == "length":
+                return {}, (
+                    f"the arguments for '{spec.name}' were cut off at the token "
+                    f"limit before they were complete"
+                )
             return {}, "could not produce valid arguments for this tool"
         if "_missing" in bound:
             return {}, f"required input not found in the sources: {bound['_missing']}"
@@ -1043,8 +1079,15 @@ class AgentRunner:
         *,
         json_schema: dict[str, Any] | None = None,
         state: AgentState,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> Any:
-        """One non-streaming model call, with the budget updated."""
+        """One non-streaming model call, with the budget updated.
+
+        `max_tokens` covers the model's *reasoning* as well as its output.
+        That is the trap: a thinking model can spend the entire allowance
+        deliberating and emit a truncated answer, and a truncated JSON object
+        is indistinguishable from a model that cannot follow a schema.
+        """
         info = self.registry.get_model(logical_name)
         provider = self.registry.provider_for(logical_name)
         if self.residency is not None:
@@ -1056,7 +1099,7 @@ class AgentRunner:
                 temperature=0.0,
                 json_schema=json_schema,
                 num_ctx=info.default_num_ctx,
-                max_tokens=1024,
+                max_tokens=max_tokens,
             )
         )
         state["budget"].tokens_used += result.usage.total_tokens
