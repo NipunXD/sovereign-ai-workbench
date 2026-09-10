@@ -293,6 +293,22 @@ class AgentRunner:
             tool = (raw_step.get("tool") or "").strip() or None
             if tool in {"null", "none", "None"}:
                 tool = None
+
+            # A step that names a tool is a tool step, whatever the model
+            # called it. Planners routinely label artifact generation as
+            # "synthesize" — it is, in the everyday sense — and the execute
+            # loop stops at the first synthesize step, so the tool was
+            # silently dropped and the run answered in prose instead. Asked to
+            # "produce a Word report", the agent explained the findings and
+            # generated nothing, and because no tool ran, the approval gate
+            # had nothing to gate: a document tool that never fires looks
+            # exactly like a document tool that is correctly permitted.
+            #
+            # The presence of `tool` is the reliable signal here and the
+            # intent label is not, so the label yields to it.
+            if tool is not None and intent is not StepIntent.RETRIEVE:
+                intent = StepIntent.TOOL
+
             if intent is StepIntent.TOOL and tool not in available:
                 # The planner named a tool this principal cannot use, or one
                 # that does not exist. Drop the step rather than fail later.

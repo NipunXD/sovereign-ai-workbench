@@ -113,7 +113,13 @@ class Demo:
         self.tokens[user] = response.json()["access_token"]
 
     async def ask(
-        self, client: httpx.AsyncClient, user: str, question: str, *, quiet: bool = False
+        self,
+        client: httpx.AsyncClient,
+        user: str,
+        question: str,
+        *,
+        quiet: bool = False,
+        on_approval: Any = None,
     ) -> dict[str, Any]:
         """Run one agent turn, returning the terminal events.
 
@@ -143,6 +149,20 @@ class Demo:
                         out["steps"].append(data.get("intent", "?"))
                     elif event == "approval_required":
                         out["approval"] = data
+                        # Decided *while the stream is open*. The run polls for
+                        # a decision and then continues, so approving after the
+                        # stream closes would demonstrate the gate and nothing
+                        # past it — no document, and no provenance page with
+                        # the approver's name in it, which is the half that
+                        # matters.
+                        if (
+                            on_approval is not None
+                            and data.get("approval_id")
+                            and data.get("status") in (None, "pending")
+                        ):
+                            await on_approval(data["approval_id"])
+                    elif event == "artifact_created":
+                        out.setdefault("artifacts", []).append(data)
                     elif event == "answer":
                         out["answer"] = data.get("text", "")
                         out["citations"] = data.get("citations") or []
@@ -212,14 +232,14 @@ class Demo:
         models = response.json()
         rows = models if isinstance(models, list) else models.get("models", [])
         for row in rows:
-            mark = (
-                GREEN + "available" + RESET
-                if row.get("available")
-                else YELLOW + "not pulled" + RESET
-            )
+            # `resident` means loaded in memory right now, which is the honest
+            # thing to show: the residency manager admits and evicts models as
+            # requests arrive, so "on disk" is normal rather than a problem.
+            mark = GREEN + "resident" + RESET if row.get("resident") else DIM + "on disk" + RESET
+            pin = f" {CYAN}pinned{RESET}" if row.get("pinned") else ""
             print(
                 f"   {row.get('logical_name', '?'):22s} {DIM}→{RESET} "
-                f"{row.get('physical_id', '?'):34s} {row.get('provider', '?'):9s} {mark}"
+                f"{row.get('physical_id', '?'):36s} {row.get('provider', '?'):9s} {mark}{pin}"
             )
         providers = {row.get("provider") for row in rows}
         self.shows(
@@ -245,9 +265,15 @@ class Demo:
                 self.bad(f"search failed for {user} ({response.status_code})")
                 return
             payload = response.json()
-            hits = payload if isinstance(payload, list) else payload.get("results", [])
+            hits = payload if isinstance(payload, list) else payload.get("hits", [])
             seen[user] = {hit.get("doc_title", "?") for hit in hits}
-            print(f"   {BOLD}{user:8s}{RESET} sees {len(seen[user])} document(s)")
+            # The API reports the filter it applied, so the mechanism is shown
+            # rather than inferred from one list being shorter than the other.
+            applied = payload.get("access_filter") if isinstance(payload, dict) else ""
+            print(
+                f"   {BOLD}{user:8s}{RESET} sees {len(seen[user])} document(s)"
+                + (f"   {DIM}[{applied}]{RESET}" if applied else "")
+            )
             for title in sorted(seen[user]):
                 print(f"            {DIM}{title[:66]}{RESET}")
 
@@ -320,44 +346,79 @@ class Demo:
             "the requester cannot approve their own artifact",
         )
         await self.login(client, "approver")
+
+        decisions: dict[str, Any] = {}
+
+        async def decide(approval_id: str) -> None:
+            """Called from inside the stream, while the run is still waiting."""
+            decisions["id"] = approval_id
+            self.shows(f"generation paused, awaiting approval ({approval_id})")
+
+            # The requester tries to approve their own request first.
+            own = await client.post(
+                f"/api/v1/approvals/{approval_id}/decide",
+                json={"approved": True, "comment": "self-approval attempt"},
+                headers=self.headers("engineer"),
+            )
+            decisions["self"] = own.status_code
+            if own.status_code in (403, 409):
+                self.shows(f"the requester's own approval was refused ({own.status_code})")
+            else:
+                self.bad(
+                    f"self-approval returned {own.status_code} — separation of duties not enforced"
+                )
+
+            other = await client.post(
+                f"/api/v1/approvals/{approval_id}/decide",
+                json={"approved": True, "comment": "reviewed against INSP-2029"},
+                headers=self.headers("approver"),
+            )
+            decisions["other"] = other.status_code
+            if other.status_code == 200:
+                self.shows("approved by M. Devadiga (Maintenance Head) — a different person")
+            else:
+                self.bad(
+                    f"the approver could not approve ({other.status_code}: {other.text[:120]})"
+                )
+
         result = await self.ask(
             client,
             "engineer",
             "Produce a Word report on the V-1201 thickness survey findings.",
             quiet=True,
+            on_approval=decide,
         )
-        approval = result.get("approval")
-        if not approval:
+
+        if not result.get("approval"):
             self.bad("artifact generation proceeded without requesting approval")
             return
-        approval_id = approval.get("approval_id") or approval.get("id")
-        self.shows(f"generation paused, awaiting approval ({approval_id})")
+        if decisions.get("other") != 200:
+            return
 
-        # The requester tries to approve their own request.
-        response = await client.post(
-            f"/api/v1/approvals/{approval_id}/decide",
-            json={"approved": True, "comment": "self-approval attempt"},
-            headers=self.headers("engineer"),
-        )
-        if response.status_code in (403, 409):
-            self.shows(f"the requester's own approval was refused ({response.status_code})")
-        else:
-            self.bad(
-                f"self-approval returned {response.status_code} — separation of duties not enforced"
-            )
+        # The gate is only half the claim. The other half is that the document
+        # then exists and carries the approver's name, so it is checked rather
+        # than asserted.
+        artifacts = result.get("artifacts") or []
+        if not artifacts:
+            self.bad("approved, but no document was produced")
+            return
 
-        response = await client.post(
-            f"/api/v1/approvals/{approval_id}/decide",
-            json={"approved": True, "comment": "reviewed against INSP-2029"},
-            headers=self.headers("approver"),
+        artifact = artifacts[0]
+        self.shows(
+            f"{artifact.get('filename')} produced "
+            f"({artifact.get('size_bytes', 0):,} bytes, sha256 {str(artifact.get('sha256'))[:12]}…)"
         )
-        if response.status_code == 200:
-            self.shows("approved by M. Devadiga (Maintenance Head) — a different person")
-            self.note("the approver's name is written into the document's provenance page")
+
+        provenance = artifact.get("provenance") or {}
+        approved_by = provenance.get("approved_by") or ""
+        if approved_by:
+            self.shows(f"its provenance page names the approver: {approved_by}")
         else:
-            self.bad(
-                f"the approver could not approve ({response.status_code}: {response.text[:120]})"
-            )
+            self.bad("the document carries no approver in its provenance")
+
+        sources = provenance.get("sources") or []
+        if sources:
+            self.note(f"and cites {len(sources)} source document(s) by page")
 
     async def step_audit(self, client: httpx.AsyncClient) -> None:
         self.heading(7, "The audit log cannot be edited", "hash-chained, verified on demand")

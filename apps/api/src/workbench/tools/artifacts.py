@@ -20,6 +20,7 @@ other side of a mapping function.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -271,15 +272,90 @@ class PptxTool(_ArtifactTool):
 
 # --- flat tool input -> expressive builder spec ------------------------------
 
+# --- normalising model-authored text ------------------------------------------
+
+#: Headings the builders own. A model-authored section claiming one of these is
+#: renamed, never dropped — its content may be useful, but it must not sit
+#: above the real provenance page wearing the same title.
+RESERVED_HEADINGS = {"provenance", "sources", "source", "references", "citations"}
+
+
+def _lines(text: str) -> list[str]:
+    """Split model text into lines, including newlines it only *described*.
+
+    Models filling a JSON string field routinely emit a literal backslash-n
+    rather than a real line break, and the two are indistinguishable to a
+    reader of the finished document — except that one of them renders as the
+    characters `\n` in the middle of a sentence. A generated report that says
+    "Key findings include:\n- CML-04 showed the highest loss" is one an
+    engineer has to mentally repair, so both forms become real breaks here.
+    """
+    normalised = text.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\t", " ")
+    return [
+        cleaned for line in normalised.splitlines() if (cleaned := _strip_json_debris(line.strip()))
+    ]
+
+
+#: Structural JSON left at the end of a value when the model's argument object
+#: was truncated mid-generation. Observed as a report line ending
+#: `... 7. Retirement Criteria."}],`.
+#:
+#: The *closing quote* is what makes this safe to match. A first attempt keyed
+#: on the brackets alone and mangled legitimate prose — "(see figure 2)" lost
+#: its bracket and "[12.50, 9.20]" lost its own — which is a worse fault than
+#: the one being fixed, because it corrupts correct text silently. Requiring a
+#: quote before the bracket run matches the truncation artefact and nothing an
+#: engineer would actually write.
+_JSON_DEBRIS = re.compile(r"""["'`]\s*[}\])][\s"'`,;:}\])]*$""")
+
+
+def _strip_json_debris(line: str) -> str:
+    """Remove a trailing fragment of the enclosing JSON from model text."""
+    if not line:
+        return line
+    trimmed = _JSON_DEBRIS.sub("", line)
+    # If the pattern would eat the whole line, it was not debris.
+    return trimmed if trimmed.strip() else line
+
+
+def _body_blocks(text: str) -> list[Block]:
+    """One block per line, promoting lines the model wrote as list items."""
+    blocks: list[Block] = []
+    pending: list[str] = []
+
+    def flush() -> None:
+        if pending:
+            blocks.append(Block(type="bullets", items=list(pending)))
+            pending.clear()
+
+    for line in _lines(text):
+        stripped = re.sub(r"^\s*(?:[-*\u2022]|\d+[.)])\s+", "", line)
+        if stripped != line:
+            pending.append(stripped)
+        else:
+            flush()
+            blocks.append(Block(type="paragraph", text=line))
+    flush()
+    return blocks
+
+
+def _safe_heading(heading: str) -> str:
+    """Keep a model-authored section out of the builder's reserved namespace."""
+    if heading.strip().lower().rstrip(":") in RESERVED_HEADINGS:
+        return f"{heading.strip().rstrip(':')} (as stated in the answer)"
+    return heading
+
 
 def _to_docx_spec(args: DocxInput) -> DocxSpec:
     blocks: list[Block] = []
     for section in args.sections:
-        blocks.append(Block(type="heading", text=section.heading, level=1))
+        blocks.append(Block(type="heading", text=_safe_heading(section.heading), level=1))
         if section.body:
-            blocks.append(Block(type="paragraph", text=section.body))
+            blocks.extend(_body_blocks(section.body))
         if section.bullets:
-            blocks.append(Block(type="bullets", items=section.bullets))
+            blocks.append(
+                Block(type="bullets", items=[b for s in section.bullets for b in _lines(s)])
+            )
         if section.table_headers and section.table_rows:
             blocks.append(
                 Block(
@@ -351,8 +427,10 @@ def _to_pptx_spec(args: PptxInput) -> PptxSpec:
             slides.append(
                 Slide(
                     type="bullets",
-                    title=entry.heading,
-                    bullets=list(entry.bullets),
+                    title=_safe_heading(entry.heading),
+                    # Same escaped-newline problem as the report: a bullet
+                    # holding two lines renders as one unreadable run.
+                    bullets=[b for raw in entry.bullets for b in _lines(raw)],
                     notes=entry.footnote,
                 )
             )
@@ -362,13 +440,19 @@ def _to_pptx_spec(args: PptxInput) -> PptxSpec:
             slides.append(
                 Slide(
                     type="table",
-                    title=entry.heading if not entry.bullets else f"{entry.heading} — data",
+                    title=(
+                        _safe_heading(entry.heading)
+                        if not entry.bullets
+                        else f"{_safe_heading(entry.heading)} — data"
+                    ),
                     rows=rows,
                     notes=entry.footnote,
                 )
             )
         if not entry.bullets and not entry.table_headers and not entry.table_rows:
-            slides.append(Slide(type="section", title=entry.heading, notes=entry.footnote))
+            slides.append(
+                Slide(type="section", title=_safe_heading(entry.heading), notes=entry.footnote)
+            )
 
     return PptxSpec(
         title=args.title,
