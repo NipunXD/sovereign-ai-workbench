@@ -48,9 +48,13 @@ ocr:
     always_escalate_block_types: [figure, drawing_annotation, handwriting]
 
 vision:
+  # Measured on the seed P&ID (9 tags): whole-sheet 0% recall, 2 tiles 22%,
+  # 6 tiles at 1024px 67%. Precision was 100% in every case. Tiling is doing
+  # real work — the model cannot resolve tag text at full-sheet scale.
+  # Budget roughly 50s per tile on an M4; this is a background job.
   pid_tiling:
-    tile_px: 1024        # VLMs degrade badly on a whole A1 sheet
-    overlap_px: 128
+    tile_px: 1024
+    overlap_px: 128      # a tag on a tile boundary must not be split in half
   # A tag the VLM reports is only trusted if OCR or the tag registry confirms it.
   tag_regex: "^[A-Z]{1,3}-?[0-9]{3,5}[A-Z]?$"
   require_tag_cross_validation: true

@@ -8,11 +8,28 @@ Two jobs, with different failure modes:
   model reading a bad scan is a plausible transcription, not a measurement.
 
 * **Drawing parsing.** A P&ID is tiled, because VLMs degrade badly on a whole
-  A1 sheet — small tag text disappears into the resize. Every tag the model
-  reports is then cross-checked against OCR and the tag registry, and anything
+  sheet — small tag text disappears into the resize. Every tag the model reports
+  is then cross-checked against OCR and the tag registry, and anything
   unconfirmed is marked rather than asserted. A hallucinated valve number on an
   isolation drawing is the single most dangerous output this system could
   produce.
+
+Measured on the seed P&ID (2200x1500, nine tags, qwen3-vl on an M4):
+
+    whole image, no tiling      0% recall    138s
+    2 tiles at 1600px          22% recall    158s
+    6 tiles at 1024px          67% recall    297s   <- configured
+    6 tiles at 1024px, 4B      22% recall    319s
+
+Tiling is doing real work, not adding overhead: the model simply cannot resolve
+tag text at full-sheet scale. The smaller vision model is no faster and much
+worse, so there is no cheap win available. Precision was 100% in every
+configuration — nothing was invented — which is the property that matters most
+here, and it is what makes 67% recall usable: the answer cites the tags it
+found and does not fabricate the ones it missed.
+
+At roughly five minutes per drawing this belongs in background ingestion, not
+on an interactive path.
 """
 
 from __future__ import annotations
