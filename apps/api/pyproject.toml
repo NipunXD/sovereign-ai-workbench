@@ -36,7 +36,10 @@ dependencies = [
     "redis>=5.2",
 
     # --- rag ---
-    "qdrant-client>=1.12",
+    # Pinned to the same minor as the server image in docker-compose.yml.
+    # The client refuses a minor-version gap wider than one, and matching
+    # them keeps the air-gap bundle from carrying two Qdrant versions.
+    "qdrant-client>=1.12,<1.13",
     "numpy>=2.1",
 
     # --- ingestion ---

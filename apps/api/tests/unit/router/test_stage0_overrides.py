@@ -15,12 +15,8 @@ from workbench.providers.registry import ModelRegistry
 from workbench.providers.types import Capability, Lane
 from workbench.router.router import ModelRouter, RouteRequest
 
-pytestmark = pytest.mark.anyio
 
 
-@pytest.fixture
-def anyio_backend() -> str:
-    return "asyncio"
 
 
 @pytest.fixture

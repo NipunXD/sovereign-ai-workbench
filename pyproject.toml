@@ -79,12 +79,17 @@ disallow_untyped_defs = false
 [tool.pytest.ini_options]
 minversion = "8.0"
 asyncio_mode = "auto"
+# Fixtures and the tests that use them must share one event loop; a
+# client created on one loop cannot be awaited on another.
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["apps/api/tests", "tests"]
 pythonpath = ["apps/api/src"]
 addopts = "-q --strict-markers --strict-config"
 markers = [
     "docker: requires a working Docker daemon",
     "ollama: requires a running Ollama with the model manifest pulled",
+    "qdrant: requires a running Qdrant instance",
+    "integration: exercises real infrastructure rather than fakes",
     "slow: takes more than a few seconds",
     "e2e: full-stack end-to-end test",
 ]

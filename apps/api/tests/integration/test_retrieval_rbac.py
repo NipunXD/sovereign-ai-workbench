@@ -23,7 +23,7 @@ from workbench.rag.vectorstore.base import VectorPoint
 from workbench.rag.vectorstore.qdrant_store import QdrantStore
 from workbench.security.rbac import AccessFilter, Principal, RbacConfig
 
-pytestmark = [pytest.mark.anyio, pytest.mark.integration]
+pytestmark = pytest.mark.integration
 
 QDRANT_URL = os.environ.get("WORKBENCH_QDRANT_URL", "http://localhost:6333")
 
@@ -36,9 +36,6 @@ CORPUS = [
 ]
 
 
-@pytest.fixture
-def anyio_backend() -> str:
-    return "asyncio"
 
 
 @pytest.fixture

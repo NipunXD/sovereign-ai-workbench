@@ -19,7 +19,6 @@ from workbench.providers.ollama import OllamaProvider
 from workbench.providers.openai_compat import OpenAICompatProvider
 from workbench.providers.types import ChatMessage, GenerationRequest
 
-pytestmark = pytest.mark.anyio
 
 
 def _providers() -> list[pytest.param]:
@@ -37,9 +36,6 @@ def _providers() -> list[pytest.param]:
     return cases
 
 
-@pytest.fixture
-def anyio_backend() -> str:
-    return "asyncio"
 
 
 def _build(kind: str) -> LLMProvider:
