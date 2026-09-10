@@ -43,18 +43,43 @@ class Comparison:
 
 #: Metrics where a smaller number is better. Everything else is treated as
 #: higher-is-better, which is the common case.
+#: Metrics without a threshold, where a smaller number is the better one.
+#: Only consulted when the suite has not already said which way is better —
+#: see :func:`prefers_higher`.
 LOWER_IS_BETTER = {
     "cer",
     "wer",
     "cer_no_spaces",
-    "decide_p50_ms",
-    "decide_p95_ms",
     "unsupported_rate",
     "hallucinated_citation_rate",
-    "p50_s",
-    "p95_s",
-    "mean_s",
+    "failed_run_rate",
+    "escalation_rate",
 }
+
+#: Suffixes that mean the metric is a duration.
+_DURATION_SUFFIXES = ("_ms", "_s")
+
+
+def prefers_higher(metric: str, threshold: tuple[str, float] | None) -> bool:
+    """Which direction of change is an improvement.
+
+    Derived from the suite's own threshold wherever there is one: a suite that
+    asserts ``("<=", 500)`` has already said that smaller is better, and asking
+    it twice is how the two answers drift apart. They did — the hand-maintained
+    set below still named ``decide_p95_ms`` after the router suite had split
+    that metric into ``fast_path_p95_ms`` and ``classifier_p95_ms``, so a
+    latency regression rendered as a green upward arrow. A colour that is wrong
+    even occasionally is worse than no colour, because it is read at a glance
+    and believed.
+
+    Falls back to the name for metrics no suite has bounded. Durations are the
+    reliable case; anything else has to be listed.
+    """
+    if threshold is not None:
+        return threshold[0] == ">="
+    if metric.endswith(_DURATION_SUFFIXES):
+        return False
+    return metric not in LOWER_IS_BETTER
 
 
 def render_terminal(results: list[SuiteResult], baselines: dict[str, dict[str, float]]) -> str:
@@ -86,8 +111,8 @@ def render_terminal(results: list[SuiteResult], baselines: dict[str, dict[str, f
         baseline = baselines.get(result.suite, {})
         for name, value in result.metrics.items():
             comparison = Comparison(name, value, baseline.get(name))
-            higher_is_better = name not in LOWER_IS_BETTER
             threshold = result.thresholds.get(name)
+            higher_is_better = prefers_higher(name, threshold)
             mark = ""
             if threshold:
                 mark = (

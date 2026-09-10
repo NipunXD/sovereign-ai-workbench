@@ -108,3 +108,40 @@ class TestPercentile:
         # A suite that routed nothing to a stage has no samples for it; that is
         # a legitimate zero, unlike an empty gold set.
         assert percentile([], 0.95) == 0.0
+
+
+class TestMetricDirection:
+    """Which way an arrow should point.
+
+    A regression here is invisible in the worst way: the number is right, the
+    delta is right, and only the colour lies. It happened — renaming the
+    router's latency metric left the hand-maintained list naming the old one,
+    so a slower fast path rendered as a green improvement.
+    """
+
+    def test_the_suite_threshold_decides(self) -> None:
+        from evals.harness.report import prefers_higher
+
+        # A suite asserting "<=" has already said smaller is better.
+        assert not prefers_higher("fast_path_p95_ms", ("<=", 25.0))
+        assert prefers_higher("recall_at_10", (">=", 0.85))
+        # Even a name that looks like an error rate defers to the threshold.
+        assert prefers_higher("refusal_rate", (">=", 0.75))
+
+    def test_unbounded_durations_are_lower_is_better(self) -> None:
+        from evals.harness.report import prefers_higher
+
+        for metric in ("classifier_p95_ms", "fast_path_p50_ms", "p95_latency_s", "mean_s"):
+            assert not prefers_higher(metric, None), metric
+
+    def test_unbounded_error_rates_are_lower_is_better(self) -> None:
+        from evals.harness.report import prefers_higher
+
+        for metric in ("cer", "wer", "cer_no_spaces", "failed_run_rate"):
+            assert not prefers_higher(metric, None), metric
+
+    def test_anything_else_defaults_to_higher_is_better(self) -> None:
+        from evals.harness.report import prefers_higher
+
+        assert prefers_higher("mean_confidence", None)
+        assert prefers_higher("hybrid_share", None)
