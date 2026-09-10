@@ -1,0 +1,24 @@
+{"id": "rt01", "text": "What does SOP-4412 say about the hold time?", "lane": "reasoning"}
+{"id": "rt02", "text": "Compare the 2023 and 2029 inspection findings for V-1201", "lane": "reasoning"}
+{"id": "rt03", "text": "Why is CML-04 corroding faster than the other locations?", "lane": "reasoning"}
+{"id": "rt04", "text": "Explain the difference between MAWP and design pressure", "lane": "reasoning"}
+{"id": "rt05", "text": "Write a python script to parse the maintenance CSV", "lane": "coding"}
+{"id": "rt06", "text": "Implement a function that computes remaining life from thickness readings", "lane": "coding"}
+{"id": "rt07", "text": "Debug this pandas code that fails on the readings dataframe", "lane": "coding"}
+{"id": "rt08", "text": "Write a script using numpy to fit a corrosion trend line", "lane": "coding"}
+{"id": "rt09", "text": "Summarise the entire inspection report for V-1201", "lane": "long_ctx"}
+{"id": "rt10", "text": "Give me an overview of the whole maintenance manual", "lane": "long_ctx"}
+{"id": "rt11", "text": "Read through the complete SOP and list every hold point", "lane": "long_ctx"}
+{"id": "rt12", "text": "hi", "lane": "utility"}
+{"id": "rt13", "text": "thanks", "lane": "utility"}
+{"id": "rt14", "text": "What is the vibration alert threshold?", "lane": "reasoning"}
+{"id": "rt15", "text": "Which valves isolate the vessel from the flare header?", "lane": "reasoning"}
+{"id": "rt16", "text": "What is the corrosion rate at CML-04?", "lane": "reasoning"}
+{"id": "rt17", "text": "Generate a report on the turnaround scope", "lane": "reasoning"}
+{"id": "rt18", "text": "Explain what a P&ID drawing is and how to read one", "lane": "reasoning", "note": "talks about a drawing without attaching one — must not reach the vision lane"}
+{"id": "rt19", "text": "What does the photograph in the inspection report show?", "lane": "reasoning", "note": "mentions a photo but attaches nothing"}
+{"id": "rt20", "text": "Which valves are shown on this drawing?", "lane": "vision", "has_images": true}
+{"id": "rt21", "text": "Read the handwritten note in the margin", "lane": "vision", "has_images": true}
+{"id": "rt22", "text": "What is the nameplate rating?", "lane": "vision", "has_images": true}
+{"id": "rt23", "text": "write a script to process this image", "lane": "vision", "has_images": true, "note": "text argues for coding; the attachment must win"}
+{"id": "rt24", "text": "Summarise these documents", "lane": "long_ctx", "estimated_tokens": 60000, "note": "oversized prompt routes on size, not wording"}

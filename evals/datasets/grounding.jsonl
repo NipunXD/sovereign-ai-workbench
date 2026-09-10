@@ -1,0 +1,8 @@
+{"id": "g01", "query": "What is the depressurisation rate limit for V-1201?", "answerable": true, "expect_phrase": "2 bar"}
+{"id": "g02", "query": "What is the minimum required shell thickness for V-1201?", "answerable": true, "expect_phrase": "8"}
+{"id": "g03", "query": "What is the vibration alert threshold for centrifugal pumps?", "answerable": true, "expect_phrase": "4.5"}
+{"id": "g04", "query": "What purge duration was used during the 2019 turnaround?", "answerable": false, "note": "no 2019 turnaround record exists in the corpus"}
+{"id": "g05", "query": "What is the design pressure of vessel V-9999?", "answerable": false, "note": "the tag does not exist"}
+{"id": "g06", "query": "Who is the current plant manager of MRPL?", "answerable": false, "note": "not an engineering document the corpus contains"}
+{"id": "g07", "query": "What was the outcome of the 2031 statutory inspection?", "answerable": false, "note": "a future date"}
+{"id": "g08", "query": "How many litres of nitrogen were consumed during the last purge?", "answerable": false, "note": "plausible-sounding but never recorded"}

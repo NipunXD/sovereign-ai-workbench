@@ -1,0 +1,20 @@
+{"id": "r01", "query": "What is the depressurisation rate limit for V-1201?", "expect_doc": "SOP-4412", "expect_phrase": "2 bar per minute", "note": "core SOP lookup"}
+{"id": "r02", "query": "How long must the vessel be held at 120 degC?", "expect_doc": "SOP-4412", "expect_phrase": "four hours", "note": "paraphrased — the document says 'Hold at 4 barg for four hours at 120 degC'"}
+{"id": "r03", "query": "What is the minimum required shell thickness for V-1201?", "expect_doc": "SOP-4412", "expect_phrase": "8.0 mm", "note": "retirement criteria"}
+{"id": "r04", "query": "V-1201 CML-04 thickness 2029", "expect_doc": "INSP-2029-V1201", "expect_phrase": "9.20", "note": "exact tag plus year — sparse retrieval should carry this"}
+{"id": "r05", "query": "What was measured at the bottom shell in the latest survey?", "expect_doc": "INSP-2029-V1201", "expect_phrase": "CML-04", "note": "indirect reference to a CML by location"}
+{"id": "r06", "query": "Which instrument was used for the ultrasonic measurements?", "expect_doc": "INSP-2029-V1201", "expect_phrase": "Olympus", "note": "specific detail buried in the method section"}
+{"id": "r07", "query": "Who signed off the 2029 inspection?", "expect_doc": "INSP-2029-V1201", "expect_phrase": "Nair", "note": "sign-off section"}
+{"id": "r08", "query": "pump vibration alert threshold", "expect_doc": "SOP-2210", "expect_phrase": "4.5", "note": "acceptance criteria"}
+{"id": "r09", "query": "What is the shutdown threshold for centrifugal pump vibration?", "expect_doc": "SOP-2210", "expect_phrase": "7.1", "note": "the higher of two thresholds — must not return the alert value"}
+{"id": "r10", "query": "Which ISO standard governs vibration assessment?", "expect_doc": "SOP-2210", "expect_phrase": "10816", "note": "standard reference"}
+{"id": "r11", "query": "P-101A vibration survey findings", "expect_doc": "MAINT-LOG-2029Q1", "expect_phrase": "7.1", "note": "tabular maintenance log"}
+{"id": "r12", "query": "How many exchanger tubes were plugged?", "expect_doc": "MAINT-LOG-2029Q1", "expect_phrase": "12 tubes", "note": "detail inside a table row"}
+{"id": "r13", "query": "What is the approved turnaround budget?", "expect_doc": "MEMO-2029-014", "expect_phrase": "14.2", "note": "RESTRICTED — only a cleared user should reach this"}
+{"id": "r14", "query": "catalyst formulation nickel molybdenum ratio", "expect_doc": "MEMO-2029-014", "expect_phrase": "3:1", "note": "RESTRICTED — the adversarial confidentiality case"}
+{"id": "r15", "query": "Which valves isolate V-1201 from the flare header?", "expect_doc": "SOP-4412", "expect_phrase": "XV-1207", "note": "two tags, one answer"}
+{"id": "r16", "query": "What gas test is required before entry?", "expect_doc": "SOP-4412", "expect_phrase": "LEL", "note": "nitrogen purge section"}
+{"id": "r17", "query": "equipment tag registry P&ID reference for PSV-1207", "expect_doc": "TAG-REGISTRY", "expect_phrase": "PSV-1207", "note": "spreadsheet lookup"}
+{"id": "r18", "query": "What material is V-1201 made from?", "expect_doc": "INSP-2029-V1201", "expect_phrase": "SA-516", "note": "equipment details"}
+{"id": "r19", "query": "2023 thickness survey conclusions for V-1201", "expect_doc": "INSP-2023-V1201", "expect_phrase": "12.50", "note": "the earlier of two similar reports — must not return the 2029 one"}
+{"id": "r20", "query": "confined space entry requirements", "expect_doc": "SOP-4412", "expect_phrase": "permit", "note": "safety section"}
