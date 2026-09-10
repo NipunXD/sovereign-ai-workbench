@@ -70,7 +70,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     registry = ModelRegistry(settings.models_manifest)
     residency = ResidencyManager(
         registry,
-        max_resident_gb=float(registry.profile(settings.model_profile).get("max_resident_gb", 14.0)),
+        max_resident_gb=float(
+            registry.profile(settings.model_profile).get("max_resident_gb", 14.0)
+        ),
         allow_swap=bool(registry.profile(settings.model_profile).get("allow_swap", True)),
     )
     app.state.registry = registry
@@ -95,7 +97,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     app.state.sandbox = sandbox
     healthy, detail = await sandbox.health()
-    log.info("sandbox_ready" if healthy else "sandbox_unavailable", backend=sandbox.name, detail=detail)
+    log.info(
+        "sandbox_ready" if healthy else "sandbox_unavailable", backend=sandbox.name, detail=detail
+    )
     # Containers left by a crashed process hold their memory reservation, so
     # they are cleared before this one starts creating more.
     if reap := getattr(sandbox, "reap_orphans", None):
@@ -104,7 +108,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # --- tools ---
     # Registered here rather than discovered by import side effect, so the set
     # of things the agent can do is visible in one place.
-    from workbench.tools.artifacts import DocxTool, XlsxTool
+    from workbench.tools.artifacts import DocxTool, PptxTool, XlsxTool
     from workbench.tools.calc import EngineeringCalcTool
     from workbench.tools.code import RunPythonTool
     from workbench.tools.registry import ToolRegistry
@@ -119,6 +123,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         RunPythonTool(sandbox, artifact_files=app.state.generated_files),
         DocxTool(app.state.artifact_store, images=app.state.generated_files),
         XlsxTool(app.state.artifact_store),
+        PptxTool(app.state.artifact_store, images=app.state.generated_files),
     )
     app.state.tools = tools
 
@@ -135,7 +140,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         from workbench.db.session import get_session_factory
 
         app.state.approval_gate = ApprovalGate(get_session_factory())
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         # The service still serves /health and the admin status grid without a
         # database, which is what an operator needs in order to diagnose why.
         log.error("database_init_failed", error=str(exc))
@@ -150,7 +155,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         missing = sorted(name for name, ok in availability.items() if not ok)
         if missing:
             log.warning("models_missing", models=missing, hint="scripts/pull_models.sh")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning("model_availability_probe_failed", error=str(exc))
 
     # --- retrieval ---
@@ -191,9 +196,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             dataset_dir=settings.data_dir / "datasets",
             # The embedding model's context window is the hard ceiling on a
             # chunk; overrunning it is truncated silently by the backend.
-            chunker=Chunker(
-                ChunkSpec(max_child_tokens=int(embed_model.context_window * 0.9))
-            ),
+            chunker=Chunker(ChunkSpec(max_child_tokens=int(embed_model.context_window * 0.9))),
             ocr_engine=build_engine("rapidocr"),
             vision_reader=VisionReader(registry=registry, residency=residency),
             config=PipelineConfig(max_upload_mb=settings.max_upload_mb),
@@ -201,7 +204,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.indexer = DocumentIndexer(embedder=embedder, vector_store=store)
 
         log.info("retrieval_ready", collection=embedder.collection, dimensions=embedder.dimensions)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         app.state.retriever = None
         app.state.vector_store = None
         app.state.pipeline = None
@@ -221,7 +224,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # from the first user request, where it would be plainly visible.
     try:
         await residency.warm_pinned(settings.model_profile)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning("pinned_warm_failed", error=str(exc))
 
     yield
@@ -256,7 +259,9 @@ class RequestContextMiddleware:
             await self.app(scope, receive, send)
             return
 
-        headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers", [])}
+        headers = {
+            k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers", [])
+        }
         request_id = headers.get("x-request-id") or f"req_{new_id()}"
         started = time.perf_counter()
         bind_request_context(

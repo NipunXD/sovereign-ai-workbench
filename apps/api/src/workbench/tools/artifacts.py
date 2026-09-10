@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 
 from workbench.artifacts.base import ArtifactBytes
 from workbench.artifacts.docx_builder import Block, DocxBuilder, DocxSpec
+from workbench.artifacts.pptx_builder import PptxBuilder, PptxSpec, Slide
 from workbench.artifacts.provenance import Provenance
 from workbench.artifacts.store import ArtifactStore
 from workbench.artifacts.xlsx_builder import (
@@ -76,9 +77,7 @@ class XlsxInput(BaseModel):
     sheet_name: str = Field(default="Data", description="Name of the sheet")
     classification: Literal["public", "internal", "confidential", "restricted"] = "internal"
     headers: list[str] = Field(description="Column headers, left to right")
-    rows: list[list[str]] = Field(
-        default_factory=list, description="Data rows, aligned to headers"
-    )
+    rows: list[list[str]] = Field(default_factory=list, description="Data rows, aligned to headers")
     numeric_headers: list[str] = Field(
         default_factory=list,
         description="Headers whose values are numbers, so Excel treats them as such",
@@ -97,6 +96,35 @@ class XlsxInput(BaseModel):
         description="Headers to plot as a line chart, if a chart is wanted",
     )
     notes: list[str] = Field(default_factory=list)
+
+
+class BriefingSlide(BaseModel):
+    """One slide. Flat, for the same reason the other inputs are."""
+
+    heading: str = Field(description="Slide title")
+    bullets: list[str] = Field(
+        default_factory=list,
+        description="Bullet points. Keep each to one line; long ones do not fit on a slide.",
+    )
+    table_headers: list[str] = Field(default_factory=list, description="Table column headers")
+    table_rows: list[list[str]] = Field(
+        default_factory=list, description="Table rows, aligned to table_headers"
+    )
+    footnote: str = Field(
+        default="",
+        description=(
+            "Source reference shown at the foot of the slide, e.g. 'INSP-2029-V1201 p.2'. "
+            "A slide is forwarded on its own more often than any other format, so say "
+            "where the figures came from on the slide itself."
+        ),
+    )
+
+
+class PptxInput(BaseModel):
+    title: str = Field(description="Deck title")
+    subtitle: str = Field(default="", description="Optional subtitle")
+    classification: Literal["public", "internal", "confidential", "restricted"] = "internal"
+    slides: list[BriefingSlide] = Field(default_factory=list)
 
 
 class _ArtifactTool(BaseTool):
@@ -192,7 +220,7 @@ class XlsxTool(_ArtifactTool):
         description=(
             "Generate an Excel workbook from headers and rows. Name any numeric columns "
             "in numeric_headers so Excel treats them as numbers. Add computed columns "
-            'through formulas, as header -> Excel expression using {row}, e.g. '
+            "through formulas, as header -> Excel expression using {row}, e.g. "
             '{"Rate (mm/yr)": "=(B{row}-C{row})/6"} — use a formula rather than a '
             "precomputed value so the sheet recalculates when a reading is edited."
         ),
@@ -211,6 +239,36 @@ class XlsxTool(_ArtifactTool):
         return self._finish(artifact, provenance, ctx)
 
 
+class PptxTool(_ArtifactTool):
+    spec = ToolSpec(
+        name="artifact.pptx",
+        description=(
+            "Generate a PowerPoint briefing deck. Provide a title and an ordered list of "
+            "slides, each with a heading and either bullets or a table given as headers "
+            "plus rows. Keep bullets short — this is a deck, not a report; use "
+            "artifact.docx when the content needs prose. Every slide carries the "
+            "classification marking, and provenance and source slides are appended "
+            "automatically."
+        ),
+        input_model=PptxInput,
+        output_model=ArtifactOutput,
+        required_permissions=frozenset({"artifact:generate"}),
+        side_effect="write",
+        requires_approval=True,
+        timeout_s=60,
+    )
+
+    def __init__(self, store: ArtifactStore, images: dict[str, bytes] | None = None) -> None:
+        super().__init__(store)
+        self.images = images or {}
+
+    async def run(self, args: BaseModel, ctx: ToolContext) -> ToolResult:
+        assert isinstance(args, PptxInput)
+        provenance = self._provenance(ctx)
+        artifact = PptxBuilder(images=self.images).build(_to_pptx_spec(args), provenance)
+        return self._finish(artifact, provenance, ctx)
+
+
 # --- flat tool input -> expressive builder spec ------------------------------
 
 
@@ -226,7 +284,10 @@ def _to_docx_spec(args: DocxInput) -> DocxSpec:
             blocks.append(
                 Block(
                     type="table",
-                    rows=[section.table_headers, *[[str(c) for c in r] for r in section.table_rows]],
+                    rows=[
+                        section.table_headers,
+                        *[[str(c) for c in r] for r in section.table_rows],
+                    ],
                 )
             )
     return DocxSpec(
@@ -277,4 +338,41 @@ def _to_xlsx_spec(args: XlsxInput) -> XlsxSpec:
                 notes=args.notes,
             )
         ],
+    )
+
+
+def _to_pptx_spec(args: PptxInput) -> PptxSpec:
+    slides: list[Slide] = []
+    for entry in args.slides:
+        # A table and bullets on one slide is unreadable, so a slide carrying
+        # both becomes two. The alternative — dropping one — loses content the
+        # model meant to show.
+        if entry.bullets:
+            slides.append(
+                Slide(
+                    type="bullets",
+                    title=entry.heading,
+                    bullets=list(entry.bullets),
+                    notes=entry.footnote,
+                )
+            )
+        if entry.table_headers or entry.table_rows:
+            rows = [list(entry.table_headers)] if entry.table_headers else []
+            rows += [list(row) for row in entry.table_rows]
+            slides.append(
+                Slide(
+                    type="table",
+                    title=entry.heading if not entry.bullets else f"{entry.heading} — data",
+                    rows=rows,
+                    notes=entry.footnote,
+                )
+            )
+        if not entry.bullets and not entry.table_headers and not entry.table_rows:
+            slides.append(Slide(type="section", title=entry.heading, notes=entry.footnote))
+
+    return PptxSpec(
+        title=args.title,
+        subtitle=args.subtitle,
+        classification=args.classification,
+        slides=slides,
     )
