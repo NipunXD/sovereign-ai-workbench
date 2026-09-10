@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -40,7 +40,7 @@ def runner() -> AgentRunner:
 
 @pytest.fixture
 def state() -> dict[str, Any]:
-    return {"errors": [], "principal": None}
+    return {"errors": [], "principal": None, "user_input": "", "run_id": "run_test"}
 
 
 def _plan(
@@ -131,3 +131,116 @@ def test_a_plan_always_ends_with_synthesis(runner, state) -> None:
     # the run would end without writing an answer.
     assert plan.steps[-1].intent is StepIntent.SYNTHESIZE
     assert plan.steps[0].intent is StepIntent.TOOL
+
+
+class TestTheArtifactStepIsGuaranteed:
+    """A request for a document must plan the tool that produces one.
+
+    The prompt asks for this, and the planner usually complies. The case below
+    is one where it did not, taken verbatim from a run: six steps, three of
+    them `synthesize` describing the Word report it intended to write, and no
+    tool named anywhere. The run answered in prose, the person who asked for a
+    file got an essay about one, and because no tool ran the approval gate
+    never fired.
+    """
+
+    #: The real plan, from the trace.
+    OBSERVED: ClassVar[list[dict[str, str]]] = [
+        {
+            "id": "1",
+            "intent": "retrieve",
+            "description": "Search for documents related to V-1201 thickness survey findings.",
+        },
+        {
+            "id": "2",
+            "intent": "retrieve",
+            "description": "Search for any available reports or data on V-1201 thickness measurements.",
+        },
+        {
+            "id": "3",
+            "intent": "retrieve",
+            "description": "Check if there are existing templates or guidelines for creating a Word report.",
+        },
+        {
+            "id": "4",
+            "intent": "synthesize",
+            "description": "Compile the retrieved information into a structured Word report format.",
+        },
+        {
+            "id": "5",
+            "intent": "synthesize",
+            "description": "Format the report with appropriate sections.",
+        },
+        {
+            "id": "6",
+            "intent": "synthesize",
+            "description": "Ensure the report includes all necessary details.",
+        },
+    ]
+
+    def test_a_plan_that_forgot_the_tool_gets_it(self, runner, state) -> None:
+        state["user_input"] = "Produce a Word report on the V-1201 thickness survey findings."
+        plan = _plan(runner, state, self.OBSERVED, ["artifact.docx"])
+
+        tools = [s.tool for s in plan.steps if s.tool]
+        assert "artifact.docx" in tools, "the requested document was never planned"
+
+    def test_the_step_lands_before_the_final_synthesis(self, runner, state) -> None:
+        state["user_input"] = "Produce a Word report on the V-1201 thickness survey."
+        plan = _plan(runner, state, self.OBSERVED, ["artifact.docx"])
+
+        index = next(i for i, s in enumerate(plan.steps) if s.tool == "artifact.docx")
+        # Built after the evidence is gathered...
+        assert any(s.intent is StepIntent.RETRIEVE for s in plan.steps[:index])
+        # ...and before the answer that refers to it.
+        assert plan.steps[-1].intent is StepIntent.SYNTHESIZE
+        assert index < len(plan.steps) - 1
+
+    def test_a_plan_that_already_has_the_tool_is_untouched(self, runner, state) -> None:
+        state["user_input"] = "Produce a Word report on V-1201."
+        steps = [
+            {"id": "1", "intent": "retrieve", "description": "Find it"},
+            {"id": "2", "intent": "tool", "description": "Write it", "tool": "artifact.docx"},
+        ]
+        plan = _plan(runner, state, steps, ["artifact.docx"])
+        assert [s.tool for s in plan.steps if s.tool] == ["artifact.docx"]
+
+    def test_a_mislabelled_artifact_step_counts_as_present(self, runner, state) -> None:
+        # The other repair already turned this into a tool step; the guarantee
+        # must not then add a second one.
+        state["user_input"] = "Produce a Word report on V-1201."
+        steps = [
+            {"id": "1", "intent": "retrieve", "description": "Find it"},
+            {"id": "2", "intent": "synthesize", "description": "Write it", "tool": "artifact.docx"},
+        ]
+        plan = _plan(runner, state, steps, ["artifact.docx"])
+        assert [s.tool for s in plan.steps if s.tool] == ["artifact.docx"]
+
+    def test_a_question_gets_no_artifact_step(self, runner, state) -> None:
+        state["user_input"] = "What is the depressurisation rate limit for V-1201?"
+        steps = [
+            {"id": "1", "intent": "retrieve", "description": "Find it"},
+            {"id": "2", "intent": "synthesize", "description": "Answer"},
+        ]
+        plan = _plan(runner, state, steps, ["artifact.docx"])
+        assert all(s.tool is None for s in plan.steps)
+
+    def test_nothing_is_added_when_the_user_cannot_generate_documents(self, runner, state) -> None:
+        """The guarantee must not plan a step the permission check would drop.
+
+        Adding it anyway would replace a clear "you cannot do this" with a run
+        that quietly does less than it said.
+        """
+        state["user_input"] = "Produce a Word report on V-1201."
+        steps = [
+            {"id": "1", "intent": "retrieve", "description": "Find it"},
+            {"id": "2", "intent": "synthesize", "description": "Answer"},
+        ]
+        plan = _plan(runner, state, steps, [])  # no artifact tools offered
+        assert all(s.tool is None for s in plan.steps)
+
+    def test_the_requested_format_is_the_one_planned(self, runner, state) -> None:
+        state["user_input"] = "Make me a briefing deck on the 2029 inspection."
+        steps = [{"id": "1", "intent": "retrieve", "description": "Find it"}]
+        plan = _plan(runner, state, steps, ["artifact.docx", "artifact.pptx", "artifact.xlsx"])
+        assert [s.tool for s in plan.steps if s.tool] == ["artifact.pptx"]

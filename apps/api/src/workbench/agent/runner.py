@@ -20,6 +20,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
 
+from workbench.agent.artifact_intent import requested_artifact
 from workbench.agent.prompts import (
     PLANNER_PROMPT,
     QUERY_REWRITE_PROMPT,
@@ -334,11 +335,60 @@ class AgentRunner:
 
         if not steps:
             return fallback
+
+        steps = self._ensure_requested_artifact(steps, state, available)
+
         if steps[-1].intent is not StepIntent.SYNTHESIZE:
             steps.append(
                 PlanStep(id="final", intent=StepIntent.SYNTHESIZE, description="Write the answer")
             )
         return Plan(steps=steps[:6], rationale=str(payload.get("rationale", "")))
+
+    @staticmethod
+    def _ensure_requested_artifact(
+        steps: list[PlanStep], state: AgentState, available: set[str]
+    ) -> list[PlanStep]:
+        """Guarantee that a request for a document plans one.
+
+        The prompt asks for this and the planner usually complies. Usually is
+        not enough here, because the failure is silent: asked to "produce a
+        Word report" the planner emitted three retrieve steps and three
+        `synthesize` ones describing the document it intended to write, named
+        no tool at all, and the run answered in prose. The person who asked for
+        a file got an essay about one, and since no tool ran, the approval gate
+        never fired.
+
+        So the request is read directly and the plan repaired. A step is only
+        ever *added* — an existing artifact step, whatever the planner called
+        it, is left alone.
+        """
+        wanted = requested_artifact(str(state.get("user_input") or ""), available)
+        if wanted is None:
+            return steps
+        if any(step.tool == wanted for step in steps):
+            return steps
+
+        # Placed before the closing synthesis so the answer can refer to the
+        # document that now exists, and after everything else so it is built
+        # from the evidence the earlier steps gathered.
+        insert_at = len(steps)
+        while insert_at > 0 and steps[insert_at - 1].intent is StepIntent.SYNTHESIZE:
+            insert_at -= 1
+
+        log.info("plan_artifact_step_added", tool=wanted, run_id=state.get("run_id"))
+        steps.insert(
+            insert_at,
+            PlanStep(
+                id="artifact",
+                intent=StepIntent.TOOL,
+                description=(
+                    f"Produce the requested document with {wanted}, using the "
+                    f"evidence gathered above."
+                ),
+                tool=wanted,
+            ),
+        )
+        return steps
 
     # -------------------------------------------------------------- execute
     async def _execute(self, state: AgentState) -> AsyncIterator[TraceEvent]:

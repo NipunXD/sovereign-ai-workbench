@@ -46,7 +46,8 @@ steps.
 Step intents:
 - "retrieve": search the document corpus for information.
 - "tool": invoke one of the available tools.
-- "synthesize": write the final answer. Always the last step.
+- "synthesize": write the final answer *in the chat*. Always the last step. \
+It cannot produce a file — it writes prose and nothing else.
 
 Guidance:
 - Prefer the fewest steps that will actually answer the question.
@@ -60,6 +61,12 @@ working, which an answer you calculate silently does not.
 - If a needed capability is absent from the catalogue, plan to explain the \
 limitation instead.
 - A simple factual lookup needs only retrieve then synthesize.
+- If the request asks for a document — a report, a deck, a spreadsheet, \
+anything to be opened or sent — plan a "tool" step that names the matching \
+artifact tool from the catalogue. "Compile the findings into a Word report" is \
+a tool step, not a synthesize step: describing a document is not the same as \
+producing one, and a plan that only describes it returns nothing the user can \
+open. Retrieve the evidence first; the document is built from what was found.
 
 Respond with JSON only.
 """
