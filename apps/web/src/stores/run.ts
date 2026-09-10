@@ -19,6 +19,10 @@ export interface ChatMessage {
    *  whatever arrived before the cut, and presenting a half-finished answer as
    *  a complete one is how a reader ends up trusting a truncated figure. */
   status: "streaming" | "done" | "error" | "cancelled" | "interrupted";
+  /** Things the run understood and declined to do, with the reason. Shown
+   *  next to the answer rather than in the trace: a refusal the person
+   *  never sees is indistinguishable from a failure. */
+  limitations: string[];
   error?: string;
   startedAt: number;
 }

@@ -122,6 +122,24 @@ export default function ChatPage() {
                           <CitationList citations={message.citations} />
                         ) : null}
 
+                        {message.limitations?.length ? (
+                          // Above the answer, not in the trace panel. This is
+                          // the run declining a request the person made, and
+                          // a refusal they have to go looking for reads as a
+                          // failure instead of a decision.
+                          <div className="mt-2 space-y-1.5">
+                            {message.limitations.map((note) => (
+                              <p
+                                key={note}
+                                className="rounded border border-warn/40 bg-warn/10 px-2 py-1.5 text-xs text-warn"
+                              >
+                                <span className="font-medium">Not generated — </span>
+                                {note}
+                              </p>
+                            ))}
+                          </div>
+                        ) : null}
+
                         {message.error ? (
                           // An interrupted run is amber, not red: nothing
                           // failed, the answer is simply incomplete. Colouring

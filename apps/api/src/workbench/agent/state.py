@@ -193,6 +193,10 @@ class AgentState(TypedDict, total=False):
     #: Per-loop counters, so a cycle cannot run forever.
     loops: dict[str, int]
     errors: Annotated[list[dict[str, Any]], append_list]
+    #: Things the run could not do and the reason, in words meant for the
+    #: person who asked. Distinct from `errors`, which records faults: a
+    #: limitation is the system working correctly and declining.
+    limitations: Annotated[list[dict[str, Any]], append_list]
     #: Set when the run halted for a human decision.
     approval: dict[str, Any] | None
     status: str

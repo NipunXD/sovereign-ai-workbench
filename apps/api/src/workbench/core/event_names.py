@@ -38,5 +38,8 @@ class EventName:
     ARTIFACT_CREATED = "artifact_created"
     VALIDATION = "validation"
     APPROVAL_REQUIRED = "approval_required"
+    #: Something the run could not do, and why, stated for the user rather
+    #: than for a log. Not an error: the run continues and answers.
+    LIMITATION = "limitation"
     ERROR = "error"
     RUN_FINISHED = "run_finished"

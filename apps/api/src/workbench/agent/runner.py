@@ -20,7 +20,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
 
-from workbench.agent.artifact_intent import requested_artifact
+from workbench.agent.artifact_intent import FORMAT_NAMES, detect_format, requested_artifact
 from workbench.agent.prompts import (
     PLANNER_PROMPT,
     QUERY_REWRITE_PROMPT,
@@ -176,6 +176,7 @@ class AgentRunner:
             "tool_results": [],
             "artifacts": [],
             "errors": [],
+            "limitations": [],
             "loops": {"retrieve": 0, "validate": 0},
             "budget": budget or Budget(),
             "status": "running",
@@ -264,6 +265,13 @@ class AgentRunner:
                     EventName.ERROR,
                     {"code": "plan_step_dropped", "message": problem["error"], "recoverable": True},
                 )
+
+        # Emitted as well as put in the synthesis prompt. The prompt asks the
+        # model to say this and it usually will; the event means the user is
+        # told whether or not it does. A refusal the person never sees is the
+        # thing being fixed, so it cannot rest on the model's cooperation.
+        for limitation in state["limitations"]:
+            yield TraceEvent(EventName.LIMITATION, dict(limitation))
 
     def _parse_plan(self, raw: str, state: AgentState) -> Plan:
         """Turn the planner's JSON into a Plan, tolerating a bad response.
@@ -362,6 +370,31 @@ class AgentRunner:
         ever *added* — an existing artifact step, whatever the planner called
         it, is left alone.
         """
+        asked_for = detect_format(str(state.get("user_input") or ""))
+        if asked_for is not None and asked_for not in available:
+            # The request was understood and refused, which is not the same as
+            # not noticing it. Saying so is the whole point: the run otherwise
+            # answers in prose and the person who asked for a file is left to
+            # infer from its absence that something went wrong.
+            state["limitations"].append(
+                {
+                    "kind": "artifact_not_permitted",
+                    "tool": asked_for,
+                    "message": (
+                        f"A {FORMAT_NAMES.get(asked_for, 'document')} was requested, but "
+                        f"{getattr(state.get('principal'), 'username', 'this account')} "
+                        f"does not hold the "
+                        f"'artifact:generate' permission, so this run cannot produce "
+                        f"files. The findings are answered below instead. Generating "
+                        f"the document needs an account with that permission — the "
+                        f"engineer and senior engineer roles have it, and the approver "
+                        f"role deliberately does not, so that the person who signs a "
+                        f"document off is not the person who produced it."
+                    ),
+                }
+            )
+            return steps
+
         wanted = requested_artifact(str(state.get("user_input") or ""), available)
         if wanted is None:
             return steps
@@ -921,6 +954,12 @@ class AgentRunner:
                 "",
                 f"NOTE: the run {state['budget'].reason()}. Answer with what is "
                 f"available and state plainly what could not be completed.",
+            ]
+        for limitation in state.get("limitations") or []:
+            parts += [
+                "",
+                f"NOTE: {limitation['message']} Open the answer by saying this "
+                f"plainly, in one sentence, before the findings.",
             ]
         return "\n".join(parts)
 

@@ -72,6 +72,7 @@ export function useAgentStream() {
         validation: null,
         summary: null,
         status: "done",
+        limitations: [],
         startedAt: Date.now(),
       });
       store.append({
@@ -84,6 +85,7 @@ export function useAgentStream() {
         validation: null,
         summary: null,
         status: "streaming",
+        limitations: [],
         startedAt: Date.now(),
       });
       store.setRunning(true);
@@ -222,6 +224,15 @@ export function useAgentStream() {
                 recoverable: Boolean(payload.recoverable),
               });
               break;
+
+            case "limitation": {
+              const message = String(payload.message ?? "");
+              const existing = run.messages.at(-1)?.limitations ?? [];
+              if (message && !existing.includes(message)) {
+                run.patchLast({ limitations: [...existing, message] });
+              }
+              break;
+            }
 
             case "run_finished":
               finished = true;

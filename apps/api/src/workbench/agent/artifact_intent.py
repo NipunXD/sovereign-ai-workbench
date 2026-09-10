@@ -56,29 +56,48 @@ _GENERIC = r"(?:report|write-?up|document|summary|minutes|note)"
 _SPAN = 60
 
 
-def requested_artifact(text: str, available: set[str]) -> str | None:
-    """The artifact tool this request asks for, if any.
+#: What each tool produces, for saying so in plain words.
+FORMAT_NAMES: dict[str, str] = {
+    DOCX: "Word document",
+    XLSX: "Excel workbook",
+    PPTX: "PowerPoint deck",
+}
 
-    Args:
-        text: The user's message.
-        available: Tool names this principal may actually use. A format the
-            caller cannot generate returns None rather than a tool that would
-            be dropped later — the run should explain the limitation instead
-            of silently planning something impossible.
+
+def detect_format(text: str) -> str | None:
+    """The artifact tool this request asks for, ignoring who is asking.
+
+    Separate from :func:`requested_artifact` because the two questions have
+    different answers and both matter. "Which file did they ask for?" is a
+    fact about the sentence; "can this person produce it?" is a fact about
+    their role. Collapsing them would leave the run unable to distinguish a
+    request it should ignore from one it must decline out loud.
     """
     if not text:
         return None
     lowered = " ".join(text.lower().split())
 
     for tool, pattern in _FORMATS:
-        if tool not in available:
-            continue
         # The verb must come before the object and stay close to it, so
         # "summarise the deck we retrieved" is not read as a request to build
         # one.
         if re.search(rf"\b{_PRODUCE}\b.{{0,{_SPAN}}}?\b{pattern}\b", lowered):
             return tool
 
-    if DOCX in available and re.search(rf"\b{_PRODUCE}\b.{{0,{_SPAN}}}?\b{_GENERIC}\b", lowered):
+    if re.search(rf"\b{_PRODUCE}\b.{{0,{_SPAN}}}?\b{_GENERIC}\b", lowered):
         return DOCX
     return None
+
+
+def requested_artifact(text: str, available: set[str]) -> str | None:
+    """The artifact tool this request asks for *and* the caller may use.
+
+    Args:
+        text: The user's message.
+        available: Tool names this principal may actually use. A format the
+            caller cannot generate returns None rather than a tool that would
+            be dropped later — the run explains the limitation instead of
+            silently planning something impossible.
+    """
+    wanted = detect_format(text)
+    return wanted if wanted is not None and wanted in available else None

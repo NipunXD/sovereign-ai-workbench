@@ -40,7 +40,13 @@ def runner() -> AgentRunner:
 
 @pytest.fixture
 def state() -> dict[str, Any]:
-    return {"errors": [], "principal": None, "user_input": "", "run_id": "run_test"}
+    return {
+        "errors": [],
+        "limitations": [],
+        "principal": None,
+        "user_input": "",
+        "run_id": "run_test",
+    }
 
 
 def _plan(
@@ -244,3 +250,54 @@ class TestTheArtifactStepIsGuaranteed:
         steps = [{"id": "1", "intent": "retrieve", "description": "Find it"}]
         plan = _plan(runner, state, steps, ["artifact.docx", "artifact.pptx", "artifact.xlsx"])
         assert [s.tool for s in plan.steps if s.tool] == ["artifact.pptx"]
+
+
+class TestAnUnpermittedRequestIsExplained:
+    """Asking for a file you may not generate must be answered, not ignored.
+
+    The approver role holds `artifact:approve` and deliberately not
+    `artifact:generate`, so that whoever signs a document off is not whoever
+    produced it. A request from that account is therefore correctly refused —
+    but the run used to answer in prose with nothing said, leaving the person
+    to infer from the file's absence that something had broken.
+    """
+
+    def test_the_run_records_why_it_could_not_generate(self, runner, state) -> None:
+        state["user_input"] = "Produce a Word report on the V-1201 thickness survey."
+        state["principal"] = SimpleNamespace(username="approver")
+        _plan(runner, state, [{"id": "1", "intent": "retrieve", "description": "Find it"}], [])
+
+        assert len(state["limitations"]) == 1
+        note = state["limitations"][0]
+        assert note["kind"] == "artifact_not_permitted"
+        assert note["tool"] == "artifact.docx"
+        # Names the format, the missing permission, and the way forward.
+        assert "Word document" in note["message"]
+        assert "artifact:generate" in note["message"]
+        assert "approver" in note["message"]
+
+    def test_the_format_asked_for_is_the_one_named(self, runner, state) -> None:
+        state["user_input"] = "Make me a briefing deck on the 2029 inspection."
+        state["principal"] = SimpleNamespace(username="approver")
+        _plan(runner, state, [{"id": "1", "intent": "retrieve", "description": "Find it"}], [])
+
+        assert state["limitations"][0]["tool"] == "artifact.pptx"
+        assert "PowerPoint deck" in state["limitations"][0]["message"]
+
+    def test_a_permitted_request_records_no_limitation(self, runner, state) -> None:
+        state["user_input"] = "Produce a Word report on the V-1201 thickness survey."
+        state["principal"] = SimpleNamespace(username="senior")
+        plan = _plan(
+            runner,
+            state,
+            [{"id": "1", "intent": "retrieve", "description": "Find it"}],
+            ["artifact.docx"],
+        )
+        assert state["limitations"] == []
+        assert any(s.tool == "artifact.docx" for s in plan.steps)
+
+    def test_a_plain_question_records_no_limitation(self, runner, state) -> None:
+        state["user_input"] = "What is the depressurisation rate limit for V-1201?"
+        state["principal"] = SimpleNamespace(username="approver")
+        _plan(runner, state, [{"id": "1", "intent": "retrieve", "description": "Find it"}], [])
+        assert state["limitations"] == []
