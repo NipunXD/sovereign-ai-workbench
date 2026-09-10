@@ -21,12 +21,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from workbench.agent.prompts import (
-    GROUNDING_JUDGE_PROMPT,
     PLANNER_PROMPT,
     QUERY_REWRITE_PROMPT,
     SUFFICIENCY_PROMPT,
     SYNTHESIS_PROMPT,
 )
+from workbench.agent.refusal import is_refusal
 from workbench.agent.state import (
     AgentState,
     Budget,
@@ -193,7 +193,7 @@ class AgentRunner:
                 yield event
             async for event in self._synthesise(state):
                 yield event
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             # A failure must produce an honest message, never a silent stop.
             log.exception("agent_run_failed", run_id=state["run_id"], error=str(exc))
             state["status"] = "failed"
@@ -334,9 +334,7 @@ class AgentRunner:
                 return
             if budget.exhausted:
                 # Not an error: answer with what is available and say so.
-                state["scratchpad"].append(
-                    {"note": f"stopped early — {budget.reason()}"}
-                )
+                state["scratchpad"].append({"note": f"stopped early — {budget.reason()}"})
                 yield TraceEvent(
                     EventName.VALIDATION,
                     {"budget_exhausted": True, "reason": budget.reason()},
@@ -403,8 +401,11 @@ class AgentRunner:
             query = rewritten[0]
             yield TraceEvent(
                 EventName.STEP_STARTED,
-                {"step_id": f"{step.id}.r{loops['retrieve']}", "intent": "retrieve",
-                 "description": f"Retrying with: {query}"},
+                {
+                    "step_id": f"{step.id}.r{loops['retrieve']}",
+                    "intent": "retrieve",
+                    "description": f"Retrying with: {query}",
+                },
             )
 
     async def _sufficient(self, state: AgentState) -> tuple[bool, list[str]]:
@@ -479,14 +480,19 @@ class AgentRunner:
             try:
                 spec.input_model.model_validate(step.args)
                 return step.args, None
-            except Exception:  # noqa: BLE001 - fall through to binding
-                pass
+            except Exception as exc:
+                # The planner's arguments did not fit the schema, so they are
+                # regenerated below. Expected often enough not to warn, but
+                # silence here made a schema mismatch look like a slow model.
+                log.debug("planner_args_rejected", tool=step.tool, error=str(exc)[:200])
 
         decision = await self.router.route(
             RouteRequest(text=step.description, node_intent="plan", needs_json=True)
         )
         evidence_text = build_evidence_prompt(state.get("evidence") or [])
-        prior = json.dumps(state["scratchpad"], indent=2)[:2000] if state["scratchpad"] else "(none)"
+        prior = (
+            json.dumps(state["scratchpad"], indent=2)[:2000] if state["scratchpad"] else "(none)"
+        )
 
         # Bounded. Constrained decoding against a large schema can stall for
         # minutes on a local model, and a run that silently hangs on argument
@@ -534,7 +540,6 @@ class AgentRunner:
         if "_missing" in bound:
             return {}, f"required input not found in the sources: {bound['_missing']}"
         return bound, None
-
 
     async def _await_approval(
         self, state: AgentState, step: PlanStep
@@ -640,7 +645,7 @@ class AgentRunner:
                     await session.execute(select(User).where(User.id == user_id))
                 ).scalar_one_or_none()
                 return (user.full_name or user.username) if user else user_id
-        except Exception:  # noqa: BLE001 - provenance must not fail the run
+        except Exception:
             return user_id
 
     async def _act(self, state: AgentState, step: PlanStep) -> AsyncIterator[TraceEvent]:
@@ -650,9 +655,7 @@ class AgentRunner:
 
         bound_args, binding_error = await self._bind_args(state, step)
         if binding_error:
-            state["scratchpad"].append(
-                {"tool": step.tool, "ok": False, "error": binding_error}
-            )
+            state["scratchpad"].append({"tool": step.tool, "ok": False, "error": binding_error})
             yield TraceEvent(
                 EventName.TOOL_RESULT,
                 {"tool": step.tool, "ok": False, "error": binding_error},
@@ -665,7 +668,7 @@ class AgentRunner:
         # from the model. It is not asked, so it cannot talk its way past.
         if self.tools.requires_approval(step.tool) and self.approval_gate is not None:
             decision = None
-            async for event, decision in self._await_approval(state, step):
+            async for event, decision in self._await_approval(state, step):  # noqa: B007
                 if event is not None:
                     yield event
             if decision is not True:
@@ -698,7 +701,7 @@ class AgentRunner:
 
         try:
             result = await self.tools.dispatch(step.tool, step.args, ctx)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             state["errors"].append({"node": "act", "tool": step.tool, "error": str(exc)})
             for event in collected:
                 yield event
@@ -766,7 +769,9 @@ class AgentRunner:
             payload = data.model_dump(mode="json")
         except AttributeError:
             return str(data)[:1000]
-        return json.loads(json.dumps(payload)[:2000] + ("}" if len(json.dumps(payload)) > 2000 else ""))
+        return json.loads(
+            json.dumps(payload)[:2000] + ("}" if len(json.dumps(payload)) > 2000 else "")
+        )
 
     # ------------------------------------------------------------ synthesise
     async def _synthesise(self, state: AgentState) -> AsyncIterator[TraceEvent]:
@@ -857,11 +862,13 @@ class AgentRunner:
         import re
 
         report = ValidationReport(unresolved_citations=list(resolved.unresolved))
-        sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", resolved.text) if len(s.strip()) > 25]
+        sentences = [
+            s.strip() for s in re.split(r"(?<=[.!?])\s+", resolved.text) if len(s.strip()) > 25
+        ]
 
-        refusal_markers = ("do not contain", "does not contain", "not covered", "no information",
-                           "cannot answer", "could not find", "not available in")
-        if any(marker in resolved.text.lower() for marker in refusal_markers):
+        # A refusal has nothing to ground, so it exits before the citation
+        # checks below rather than being scored 0% for correctly declining.
+        if is_refusal(resolved.text):
             report.is_refusal = True
             report.grounded_ratio = 1.0
             return report
