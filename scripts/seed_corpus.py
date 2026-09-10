@@ -54,12 +54,20 @@ async def main() -> int:
 
     if args.regenerate or not (TRUTH_DIR / "doc_manifest.json").is_file():
         print("generating corpus files...")
-        import subprocess
-
-        subprocess.run(
-            [sys.executable, str(REPO_ROOT / "data/seed/generator/render.py")],
-            check=True, capture_output=True,
+        # Awaited rather than run with subprocess.run: this function is async,
+        # and a blocking call here stalls the event loop that the ingest below
+        # runs on. The argv is fixed — this interpreter and a path inside the
+        # repo — so there is nothing untrusted to inject.
+        process = await asyncio.create_subprocess_exec(
+            sys.executable,
+            str(REPO_ROOT / "data/seed/generator/render.py"),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
+        _, stderr = await process.communicate()
+        if process.returncode != 0:
+            print(stderr.decode(errors="replace"), file=sys.stderr)
+            raise SystemExit(f"corpus generation failed ({process.returncode})")
 
     manifest = json.loads((TRUTH_DIR / "doc_manifest.json").read_text(encoding="utf-8"))
     if args.only:
@@ -96,7 +104,9 @@ async def main() -> int:
         ).scalar_one_or_none()
         owner_id = owner.id if owner else None
 
-    print(f"\n{'document':<20} {'type':<15} {'class':<13} {'pages':>5} {'chunks':>7} {'conf':>6}  time")
+    print(
+        f"\n{'document':<20} {'type':<15} {'class':<13} {'pages':>5} {'chunks':>7} {'conf':>6}  time"
+    )
     print("-" * 84)
 
     total_started = time.perf_counter()
@@ -125,9 +135,7 @@ async def main() -> int:
                 continue
 
         started = time.perf_counter()
-        result = await pipeline.run(
-            data=data, filename=path.name, doc_id=prefixed_id("document")
-        )
+        result = await pipeline.run(data=data, filename=path.name, doc_id=prefixed_id("document"))
         if not result.ok or result.ir is None:
             print(f"{entry['doc_id']:<20} FAILED")
             continue
