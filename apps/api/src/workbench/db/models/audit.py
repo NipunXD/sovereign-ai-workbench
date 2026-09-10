@@ -20,7 +20,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, Column, Index, Integer, String, text
+from sqlalchemy import BigInteger, Column, Index, Integer, String, text as sa_text
 from sqlalchemy.dialects.postgresql import ARRAY, INET, JSONB
 from sqlmodel import Field, SQLModel
 
@@ -129,7 +129,7 @@ class AuditEvent(SQLModel, table=True):
     latency_ms: int | None = None
     tokens_in: int | None = None
     tokens_out: int | None = None
-    severity: int = Field(default=Severity.INFO, sa_column=Column(Integer, nullable=False, server_default=text("0")))
+    severity: int = Field(default=Severity.INFO, sa_column=Column(Integer, nullable=False, server_default=sa_text("0")))
     audit_metadata: dict[str, Any] = Field(
         default_factory=dict, sa_column=Column("metadata", JSONB, nullable=False, server_default="{}")
     )

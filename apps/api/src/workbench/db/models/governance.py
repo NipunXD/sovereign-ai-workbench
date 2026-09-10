@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Column, Float, Index, Integer, Text, text
+from sqlalchemy import Column, Float, Index, Integer, Text, text as sa_text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
@@ -66,7 +66,7 @@ class Artifact(SQLModel, table=True):
     provenance: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
 
     status: str = Field(default=ArtifactStatus.DRAFT, index=True)
-    version: int = Field(default=1, sa_column=Column(Integer, nullable=False, server_default=text("1")))
+    version: int = Field(default=1, sa_column=Column(Integer, nullable=False, server_default=sa_text("1")))
     supersedes_id: str | None = None
     created_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
 
@@ -145,7 +145,7 @@ class EvalResult(SQLModel, table=True):
     eval_run_id: str = Field(foreign_key="eval_runs.id", index=True)
     case_id: str = ""
     metric: str = ""
-    value: float = Field(default=0.0, sa_column=Column(Float, nullable=False, server_default=text("0")))
+    value: float = Field(default=0.0, sa_column=Column(Float, nullable=False, server_default=sa_text("0")))
     passed: bool = True
     details: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
 

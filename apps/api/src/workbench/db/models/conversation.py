@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Column, Float, Index, Integer, Text, text
+from sqlalchemy import Column, Float, Index, Integer, Text, text as sa_text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
@@ -80,9 +80,9 @@ class MessageCitation(SQLModel, table=True):
     bbox: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
     snippet: str = Field(default="", sa_column=Column(Text, nullable=False, server_default=""))
     section_path: list[str] = Field(default_factory=list, sa_column=Column(JSONB, nullable=False, server_default="[]"))
-    score: float = Field(default=0.0, sa_column=Column(Float, nullable=False, server_default=text("0")))
+    score: float = Field(default=0.0, sa_column=Column(Float, nullable=False, server_default=sa_text("0")))
     retrieval_method: str = "hybrid"
-    confidence: float = Field(default=1.0, sa_column=Column(Float, nullable=False, server_default=text("1")))
+    confidence: float = Field(default=1.0, sa_column=Column(Float, nullable=False, server_default=sa_text("1")))
 
 
 class AgentRun(SQLModel, table=True):
@@ -115,7 +115,7 @@ class AgentStep(SQLModel, table=True):
 
     id: str = Field(default_factory=lambda: prefixed_id("step"), primary_key=True)
     run_id: str = Field(foreign_key="agent_runs.id", index=True)
-    seq: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default=text("0")))
+    seq: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default=sa_text("0")))
     node: str = ""
     status: str = "running"
     input_digest: str | None = Field(default=None, max_length=64)
@@ -140,15 +140,15 @@ class RoutingDecision(SQLModel, table=True):
     lane: str = ""
     #: 0 deterministic, 1 lexical, 2 classifier. The distribution of this column
     #: is the headline number for whether the cascade is earning its keep.
-    stage_decided: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default=text("0")))
+    stage_decided: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default=sa_text("0")))
     chosen_model: str = ""
     physical_model: str = ""
     provider: str = ""
     alternatives: list[str] = Field(default_factory=list, sa_column=Column(JSONB, nullable=False, server_default="[]"))
-    confidence: float = Field(default=0.0, sa_column=Column(Float, nullable=False, server_default=text("0")))
+    confidence: float = Field(default=0.0, sa_column=Column(Float, nullable=False, server_default=sa_text("0")))
     reason: str = ""
     features_digest: str | None = Field(default=None, max_length=64)
-    decide_latency_ms: float = Field(default=0.0, sa_column=Column(Float, nullable=False, server_default=text("0")))
+    decide_latency_ms: float = Field(default=0.0, sa_column=Column(Float, nullable=False, server_default=sa_text("0")))
     swap_required: bool = False
     swap_latency_ms: float | None = None
     created_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
