@@ -1,0 +1,47 @@
+{
+  "grounding": {
+    "metrics": {
+      "answerable_accuracy": 1.0,
+      "cases": 8.0,
+      "failed_run_rate": 0.0,
+      "hallucinated_citation_rate": 0.0,
+      "mean_grounded_ratio": 0.9375,
+      "p95_s": 110.49764879210852,
+      "refusal_rate": 1.0
+    }
+  },
+  "ocr": {
+    "metrics": {
+      "cases": 2.0,
+      "cer": 0.06449563349325853,
+      "cer_no_spaces": 0.014747625995034427,
+      "escalation_rate": 0.0,
+      "mean_confidence": 0.9463831939657013,
+      "render_dpi": 400.0,
+      "wer": 0.4470163516670206
+    }
+  },
+  "retrieval": {
+    "metrics": {
+      "cases": 20.0,
+      "hybrid_share": 0.715,
+      "mrr": 0.7493055555555556,
+      "ndcg_at_10": 0.8085580415948211,
+      "p95_latency_s": 0.032836792059242725,
+      "recall_at_10": 1.0,
+      "recall_at_5": 0.9
+    }
+  },
+  "router": {
+    "metrics": {
+      "cases": 24.0,
+      "classifier_p95_ms": 6639.571915846318,
+      "fast_path_p50_ms": 0.023541972041130066,
+      "fast_path_p95_ms": 0.054791104048490524,
+      "lane_accuracy": 1.0,
+      "stage0_share": 0.20833333333333334,
+      "stage2_share": 0.08333333333333333,
+      "vision_capability_rate": 1.0
+    }
+  }
+}
