@@ -110,6 +110,17 @@ done
 
 # --- frontend ----------------------------------------------------------------
 log "Building the frontend"
+# A production build writes into apps/web/.next — the same directory a running
+# `next dev` serves from. Dev mode emits chunks named main-app.js; a production
+# build emits content-hashed ones instead, so afterwards the dev server hands
+# the browser HTML pointing at scripts that no longer exist. Every one 404s,
+# React never hydrates, and the page sits on its server-rendered fallback
+# forever with nothing in the log to explain it.
+if lsof -nP -iTCP:3000 -sTCP:LISTEN >/dev/null 2>&1; then
+    warn "something is listening on :3000 — if that is \`make dev-web\`, stop it first."
+    warn "this build will overwrite apps/web/.next and leave that dev server serving 404s."
+    warn "recovery is: stop it, rm -rf apps/web/.next, start it again."
+fi
 if command -v pnpm >/dev/null && [ -d "${REPO_ROOT}/apps/web" ]; then
     (cd "${REPO_ROOT}" && pnpm install --frozen-lockfile >/dev/null 2>&1 && pnpm --filter web build >/dev/null 2>&1) \
         && cp -R "${REPO_ROOT}/apps/web/.next" "${STAGE}/web/.next" 2>/dev/null \
