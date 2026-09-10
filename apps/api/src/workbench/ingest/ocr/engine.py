@@ -14,6 +14,7 @@ ranking.
 
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
@@ -71,6 +72,33 @@ class OcrResult:
         return sum(1 for ch in text if ch.isalnum() or ch.isspace()) / len(text)
 
 
+#: Long runs of letters with internal capitals — "CrudeFeedSurgeDrum" — are the
+#: dominant OCR spacing failure on dense scans. Recognition itself is accurate
+#: (measured ~2-3% character error ignoring spaces); it is the word boundaries
+#: that are lost, and a run-together token breaks retrieval outright because
+#: "surge drum" no longer matches the text that contains it.
+_RUN_TOGETHER = re.compile(r"\b(?=\w*[a-z])(?=\w*[A-Z])[A-Za-z]{12,}\b")
+_CAMEL_BOUNDARY = re.compile(r"(?<=[a-z])(?=[A-Z])")
+#: A digit pressed against a letter: "pressure18.0barg", "V-1201CrudeFeed".
+_DIGIT_LETTER = re.compile(r"(?<=[a-z])(?=\d)|(?<=\d)(?=[A-Z][a-z])")
+
+
+def split_run_together(text: str) -> str:
+    """Restore spaces the recogniser dropped between words.
+
+    Deliberately conservative: only tokens of twelve or more letters that mix
+    cases are touched, so ordinary long words and equipment tags are left alone.
+    The alternative — a dictionary segmenter — would mangle the tag conventions
+    and unit strings this corpus is full of.
+    """
+
+    def split(match: re.Match[str]) -> str:
+        return _CAMEL_BOUNDARY.sub(" ", match.group(0))
+
+    text = _RUN_TOGETHER.sub(split, text)
+    return _DIGIT_LETTER.sub(" ", text)
+
+
 @runtime_checkable
 class OCREngine(Protocol):
     name: str
@@ -117,7 +145,7 @@ class RapidOcrEngine:
             ys = [float(point[1]) for point in box]
             lines.append(
                 OcrLine(
-                    text=str(text),
+                    text=split_run_together(str(text)),
                     bbox=BBox.from_pixels((min(xs), min(ys), max(xs), max(ys)), width, height),
                     confidence=confidence,
                 )

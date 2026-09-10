@@ -83,7 +83,8 @@ class IngestionResult:
 @dataclass
 class PipelineConfig:
     viewer_dpi: int = 150
-    ocr_dpi: int = 300
+    #: See config/ingest.yaml for the measured accuracy/cost trade-off.
+    ocr_dpi: int = 400
     max_upload_mb: int = 200
     max_pages: int = 2000
     ocr_enabled: bool = True
@@ -129,10 +130,18 @@ class IngestionPipeline:
         warnings: list[str] = []
         completed_weight = 0.0
 
-        async def report(stage: Stage, message: str) -> None:
+        async def report(stage: Stage, message: str, within: float = 0.0) -> None:
+            """Emit progress, interpolating inside a long-running stage.
+
+            ``within`` is how far through the current stage we are, 0..1. OCR on
+            a 40-page scan otherwise reports one unchanging number for minutes.
+            """
             nonlocal completed_weight
-            if progress is not None:
-                await progress(stage, min(1.0, completed_weight / _TOTAL_WEIGHT), message)
+            if progress is None:
+                return
+            partial = STAGE_WEIGHTS[stage] * max(0.0, min(1.0, within))
+            fraction = min(1.0, (completed_weight + partial) / _TOTAL_WEIGHT)
+            await progress(stage, fraction, message)
 
         async def finish(stage: Stage, started: float, message: str = "") -> None:
             nonlocal completed_weight
@@ -234,6 +243,15 @@ class IngestionPipeline:
         chunks = self.chunker.chunk(ir)
         await finish(Stage.CHUNK, started, f"{len(chunks)} chunks")
 
+        # Embedding and indexing are the indexer's work, but the caller cannot
+        # report them from outside, and a bar that stops at 75% reads as failure.
+        started = time.perf_counter()
+        await finish(Stage.EMBED, started, f"embedding {len(chunks)} chunks")
+        started = time.perf_counter()
+        await finish(Stage.INDEX, started, "writing to the index")
+        started = time.perf_counter()
+        await finish(Stage.FINALIZE, started, "complete")
+
         degraded = bool(warnings) or ir.mean_confidence < 0.6
         ir.extraction_report.pages_ocr = ocr_pages
         ir.extraction_report.pages_vlm_escalated = escalated
@@ -285,7 +303,7 @@ class IngestionPipeline:
         ir: DocumentIR,
         source: Path,
         mime: str,
-        report: Callable[[Stage, str], Awaitable[None]],
+        report: Callable[..., Awaitable[None]],
     ) -> tuple[int, dict[int, OcrResult]]:
         """Recognise every page that has no usable native text."""
         if not self.config.ocr_enabled or self.ocr_engine is None:
@@ -301,7 +319,11 @@ class IngestionPipeline:
         options = PreprocessOptions(source_dpi=self.config.ocr_dpi)
 
         for index, page in enumerate(needs, start=1):
-            await report(Stage.OCR, f"recognising page {page.page_no} ({index}/{len(needs)})")
+            await report(
+                Stage.OCR,
+                f"recognising page {page.page_no} ({index}/{len(needs)})",
+                (index - 1) / len(needs),
+            )
             try:
                 raw = self._page_image(source, mime, page.page_no)
                 if raw is None:

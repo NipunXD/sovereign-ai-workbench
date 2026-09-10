@@ -54,6 +54,7 @@
     "doc_type": "correspondence",
     "classification": "restricted",
     "departments": [
+      "process",
       "finance",
       "maintenance"
     ],

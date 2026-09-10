@@ -185,7 +185,9 @@ SEED_DOCUMENTS: list[SeedDocument] = [
         title="Internal Memo — CDU Turnaround Scope and Budget 2029",
         doc_type="correspondence",
         classification=Classification.RESTRICTED,
-        departments=["finance", "maintenance"],
+        # Spans three departments because it does: catalyst formulation
+        # (process), budget (finance), turnaround scope (maintenance).
+        departments=["process", "finance", "maintenance"],
         tags=["turnaround", "budget"],
         sections=[
             Section("Memorandum", 1,

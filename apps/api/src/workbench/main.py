@@ -139,10 +139,36 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             embedder=embedder, vector_store=store, session_factory=session_factory
         )
         app.state.vector_store = store
+
+        # --- ingestion ---
+        from workbench.ingest.indexer import DocumentIndexer
+        from workbench.ingest.ocr.engine import build_engine
+        from workbench.ingest.pipeline import IngestionPipeline, PipelineConfig
+        from workbench.ingest.storage import BlobStore
+        from workbench.ingest.vision.reader import VisionReader
+        from workbench.rag.chunker import Chunker, ChunkSpec
+
+        app.state.pipeline = IngestionPipeline(
+            blob_store=BlobStore(settings.blob_dir),
+            page_image_dir=settings.page_image_dir,
+            dataset_dir=settings.data_dir / "datasets",
+            # The embedding model's context window is the hard ceiling on a
+            # chunk; overrunning it is truncated silently by the backend.
+            chunker=Chunker(
+                ChunkSpec(max_child_tokens=int(embed_model.context_window * 0.9))
+            ),
+            ocr_engine=build_engine("rapidocr"),
+            vision_reader=VisionReader(registry=registry, residency=residency),
+            config=PipelineConfig(max_upload_mb=settings.max_upload_mb),
+        )
+        app.state.indexer = DocumentIndexer(embedder=embedder, vector_store=store)
+
         log.info("retrieval_ready", collection=embedder.collection, dimensions=embedder.dimensions)
     except Exception as exc:  # noqa: BLE001
         app.state.retriever = None
         app.state.vector_store = None
+        app.state.pipeline = None
+        app.state.indexer = None
         log.warning("retrieval_unavailable", error=str(exc))
 
     log.info(
@@ -238,11 +264,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             media_type="application/problem+json",
         )
 
-    from workbench.api.v1 import auth, chat, health
+    from workbench.api.v1 import auth, chat, documents, health, search
 
     app.include_router(health.router, prefix="/api/v1")
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(chat.router, prefix="/api/v1")
+    app.include_router(documents.router, prefix="/api/v1")
+    app.include_router(search.router, prefix="/api/v1")
 
     return app
 
