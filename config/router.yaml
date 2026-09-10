@@ -1,0 +1,64 @@
+# =============================================================================
+# Router policy. Three stages, each able to short-circuit:
+#   stage 0  deterministic overrides   (microseconds, ~70% of traffic)
+#   stage 1  cheap feature classifier  (sub-millisecond)
+#   stage 2  LLM classifier fallback   (50-150ms, cached forever after)
+# =============================================================================
+version: 1
+
+stage0:
+  # Any attached image forces the vision lane. This is deliberately not a model
+  # decision — routing a picture to a text-only model must be impossible, not
+  # merely unlikely.
+  image_attachment_forces_vision: true
+  long_ctx_token_threshold: 12000
+  # Agent nodes declare their own intent; no classification needed.
+  node_intent_map:
+    intake: utility
+    plan: reasoning
+    synthesize: reasoning
+    sufficiency: utility
+    query_rewrite: utility
+    grounding_judge: utility
+    validate: utility
+    replan: reasoning
+
+stage1:
+  # Decide here only when the winning lane beats the runner-up by this margin.
+  margin_threshold: 0.25
+  weights:
+    coding:
+      code_fence: 3.0
+      code_verb: 2.0            # "write a script", "implement", "debug"
+      file_extension_mention: 1.5
+      library_mention: 1.5
+      artifact_code_request: 2.5
+    reasoning:
+      question_length_gt_40w: 0.5
+      comparison_verb: 1.0      # "compare", "why", "evaluate"
+      multi_clause: 0.8
+      default_bias: 1.0         # reasoning is the safe fallback
+    long_ctx:
+      summarize_whole_doc: 2.5
+      multi_document_mention: 1.5
+    vision:
+      drawing_noun: 2.5         # "P&ID", "drawing", "photo", "sketch", "diagram"
+      spatial_verb: 1.2         # "which valve", "where on", "point to"
+    utility:
+      very_short_query: 1.0     # < 5 words and no question mark
+
+stage2:
+  model: utility.small
+  temperature: 0.0
+  cache_size: 2048
+  timeout_s: 5.0
+  fallback_lane: reasoning      # classifier failure must never block a request
+
+selection:
+  # A model that is already resident is worth a real quality concession — a cold
+  # load on the M4 costs 4-9 seconds, which is worse than one tier of quality.
+  residency_bonus_per_second_saved: 0.15
+  circuit_breaker:
+    failure_threshold: 3
+    window_s: 60
+    cooldown_s: 120

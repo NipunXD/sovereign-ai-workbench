@@ -1,0 +1,65 @@
+# =============================================================================
+# Development stack. Infrastructure runs in Docker; the API and worker run on
+# the host (`make dev`) so they can reach the host's Ollama and Docker socket
+# without the container-in-container dance.
+#
+# For the packaged/air-gapped deployment see docker-compose.airgap.yml, which
+# adds the api/worker/web services and cuts their network access.
+# =============================================================================
+name: workbench
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: workbench-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-workbench}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-workbench}
+      POSTGRES_DB: ${POSTGRES_DB:-workbench}
+      # Deterministic collation so ORDER BY is stable across machines.
+      POSTGRES_INITDB_ARGS: "--locale-provider=icu --icu-locale=en-US --encoding=UTF8"
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - ./data/runtime/pgdata:/var/lib/postgresql/data
+      - ./scripts/sql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-workbench} -d ${POSTGRES_DB:-workbench}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    container_name: workbench-qdrant
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - ./data/runtime/qdrant:/qdrant/storage
+    environment:
+      QDRANT__TELEMETRY_DISABLED: "true"     # sovereignty: no phone-home
+      QDRANT__SERVICE__ENABLE_CORS: "false"
+    healthcheck:
+      # The image has no curl/wget; bash's /dev/tcp is always available.
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/6333' 2>/dev/null || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: workbench-redis
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "no"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - ./data/runtime/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped

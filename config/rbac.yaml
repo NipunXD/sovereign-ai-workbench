@@ -1,0 +1,66 @@
+# =============================================================================
+# Roles and permissions. Seeded into the database on `make seed`; editable
+# afterwards through the admin UI (every change is audited).
+#
+# Classification ladder:  public < internal < confidential < restricted
+# A principal can only retrieve documents at or below their clearance. This is
+# enforced inside the vector-store filter and the SQL WHERE clause — never by
+# filtering results after the fact, which leaks through scores and counts.
+# =============================================================================
+version: 1
+
+classifications: [public, internal, confidential, restricted]
+
+permissions:
+  - {code: "chat:use",           description: "Start conversations and ask questions"}
+  - {code: "doc:read",           description: "Retrieve and view documents"}
+  - {code: "doc:ingest",         description: "Upload documents for indexing"}
+  - {code: "doc:delete",         description: "Soft-delete documents and purge vectors"}
+  - {code: "doc:classify",       description: "Change a document's classification"}
+  - {code: "tool:vision",        description: "Invoke vision/VLM analysis tools"}
+  - {code: "tool:code_exec",     description: "Execute generated code in the sandbox"}
+  - {code: "artifact:generate",  description: "Generate Word/PPT/Excel/PDF artifacts"}
+  - {code: "artifact:approve",   description: "Approve or reject pending artifacts"}
+  - {code: "run:approve",        description: "Approve agent runs halted at a gate"}
+  - {code: "audit:read",         description: "Read the audit log and verify the chain"}
+  - {code: "user:manage",        description: "Create, modify and disable users"}
+  - {code: "model:manage",       description: "Reload the manifest, warm/unload models"}
+  - {code: "tool:manage",        description: "Enable or disable tools"}
+  - {code: "eval:run",           description: "Trigger eval suites"}
+
+roles:
+  viewer:
+    description: "Read-only access to internal documents and chat"
+    clearance: internal
+    permissions: ["chat:use", "doc:read"]
+
+  engineer:
+    description: "Day-to-day refinery engineering use"
+    clearance: confidential
+    permissions:
+      ["chat:use", "doc:read", "doc:ingest", "tool:vision", "artifact:generate"]
+
+  senior_engineer:
+    description: "Engineer plus code execution and restricted documents"
+    clearance: restricted
+    permissions:
+      ["chat:use", "doc:read", "doc:ingest", "doc:classify", "tool:vision",
+       "tool:code_exec", "artifact:generate"]
+
+  approver:
+    description: "Reviews and signs off artifacts and gated runs"
+    clearance: confidential
+    permissions: ["chat:use", "doc:read", "artifact:approve", "run:approve"]
+
+  auditor:
+    description: "Read-only oversight; cannot generate or approve anything"
+    clearance: internal
+    permissions: ["doc:read", "audit:read"]
+
+  admin:
+    description: "Platform administration"
+    clearance: restricted
+    permissions:
+      ["chat:use", "doc:read", "doc:ingest", "doc:delete", "doc:classify",
+       "tool:vision", "tool:code_exec", "artifact:generate",
+       "audit:read", "user:manage", "model:manage", "tool:manage", "eval:run"]

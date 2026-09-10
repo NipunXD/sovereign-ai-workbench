@@ -1,0 +1,19 @@
+[project]
+name = "workbench-evals"
+version = "0.1.0"
+description = "Eval and benchmark harness for the workbench"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "workbench",
+    "numpy>=2.1",
+    "rapidfuzz>=3.10",
+    "rich>=13.9",
+    "jinja2>=3.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["harness", "suites"]

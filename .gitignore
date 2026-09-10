@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.uv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+.next/
+.turbo/
+*.tsbuildinfo
+
+# Runtime data (never commit)
+data/runtime/
+!data/runtime/.gitkeep
+
+# Evals
+evals/results/*
+!evals/results/baselines/
+!evals/results/.gitkeep
+
+# Env / secrets
+.env
+.env.local
+*.pem
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/

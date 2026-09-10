@@ -1,0 +1,212 @@
+# =============================================================================
+# Model manifest — the single source of truth for model-agnosticism.
+#
+# Application code NEVER references a physical model tag. It asks for a logical
+# name ("reasoning.primary") or a lane ("vision"), and this file decides what
+# actually runs. Moving from this laptop to an air-gapped GPU server is an edit
+# to this file plus a compose overlay — zero application code changes.
+#
+# Three providers are live here, which is the point: the same request runs
+# against LM Studio (MLX, Apple Silicon), Ollama (GGUF) or vLLM (server GPUs)
+# without any call site knowing the difference.
+#
+# Verify before a demo:  scripts/pull_models.sh --check
+# =============================================================================
+version: 1
+default_profile: balanced
+
+providers:
+  # Default on this machine. MLX 4-bit is materially faster than GGUF on an M4,
+  # and LM Studio speaks the OpenAI wire format, so the vLLM adapter covers it.
+  lmstudio:
+    type: openai_compatible
+    base_url: ${LMSTUDIO_BASE_URL:-http://localhost:1234/v1}
+    timeout_s: 300
+    enabled: true
+    # LM Studio loads a model on first use and evicts on idle; the residency
+    # manager reads /api/v0/models to see what is actually resident.
+    native_admin_url: ${LMSTUDIO_ADMIN_URL:-http://localhost:1234/api/v0}
+
+  ollama:
+    type: ollama
+    base_url: ${OLLAMA_BASE_URL:-http://localhost:11434}
+    timeout_s: 300
+    enabled: true
+
+  vllm:
+    type: openai_compatible
+    base_url: ${VLLM_BASE_URL:-http://localhost:8001/v1}
+    timeout_s: 300
+    enabled: false          # flipped on by docker-compose.gpu.yml
+
+  mock:
+    type: mock
+    fixtures: apps/api/tests/fixtures/mock_responses.yaml
+    enabled: true           # always available; used by CI and `make test`
+
+# -----------------------------------------------------------------------------
+# Logical models.
+#
+# `approx_ram_gb` drives the residency manager's admission control. Get it wrong
+# and a 24 GB machine will thrash mid-demo, so these are measured values for the
+# 4-bit MLX weights plus a working KV cache, not marketing numbers.
+# -----------------------------------------------------------------------------
+models:
+  - logical: reasoning.primary
+    provider: lmstudio
+    physical: qwen/qwen3-8b
+    capabilities: [chat, tools, json, long_ctx]
+    context_window: 40960      # measured via LM Studio /api/v0/models
+    default_num_ctx: 16384
+    approx_ram_gb: 6.0
+    quality_tier: 1
+    speed_tier: 2
+
+  - logical: reasoning.fast
+    provider: lmstudio
+    physical: qwen/qwen3-4b
+    capabilities: [chat, tools, json]
+    context_window: 40960
+    default_num_ctx: 8192
+    approx_ram_gb: 3.2
+    quality_tier: 2
+    speed_tier: 1
+
+  - logical: coding.primary
+    provider: lmstudio
+    physical: qwen/qwen3-8b     # same weights today; a dedicated coder can be
+    capabilities: [chat, tools, json]   # dropped in by editing this one line
+    context_window: 40960
+    default_num_ctx: 16384
+    approx_ram_gb: 6.0
+    quality_tier: 1
+    speed_tier: 2
+
+  - logical: longctx.primary
+    provider: lmstudio
+    physical: qwen/qwen3-8b
+    capabilities: [chat, json, long_ctx]
+    context_window: 40960
+    # Anything larger than this is handled by map-reduce in doc.summarize_long,
+    # not by hoping a bigger window appears.
+    default_num_ctx: 40960
+    approx_ram_gb: 7.5          # larger KV cache at full context
+    quality_tier: 1
+    speed_tier: 3
+
+  # The vision lane runs on Ollama while the text lanes run on LM Studio. That
+  # split is not an accident of packaging — it means two genuinely different
+  # backends are exercised on every multimodal request, so the provider
+  # abstraction is proven continuously rather than asserted once.
+  - logical: vision.primary
+    provider: ollama
+    physical: qwen3-vl:8b
+    capabilities: [chat, vision, json, long_ctx]
+    context_window: 262144
+    default_num_ctx: 16384
+    approx_ram_gb: 7.0
+    quality_tier: 1
+    speed_tier: 3
+
+  - logical: vision.small
+    provider: ollama
+    physical: qwen3-vl:4b
+    capabilities: [chat, vision, json]
+    context_window: 262144
+    default_num_ctx: 8192
+    approx_ram_gb: 4.0
+    quality_tier: 2
+    speed_tier: 2
+    optional: true
+
+  - logical: utility.small
+    provider: lmstudio
+    physical: qwen/qwen3-4b
+    capabilities: [chat, json]
+    context_window: 40960
+    default_num_ctx: 4096
+    approx_ram_gb: 3.2
+    quality_tier: 3
+    speed_tier: 1
+    pinned: true                # router stage 2 must be instant
+
+  - logical: embed.primary
+    provider: lmstudio
+    physical: text-embedding-nomic-embed-text-v1.5
+    capabilities: [embed]
+    # Only 2048 tokens. This is the binding constraint on chunk size — see
+    # config/ingest.yaml, where child chunks are capped well below it.
+    context_window: 2048
+    dimensions: 768
+    approx_ram_gb: 0.3
+    quality_tier: 2
+    speed_tier: 1
+    pinned: true
+
+  # A small Ollama model kept as the last-resort reasoning fallback: if LM Studio
+  # is down entirely, chat degrades in quality but keeps working.
+  - logical: reasoning.alt
+    provider: ollama
+    physical: qwen3.5:2b
+    capabilities: [chat, tools, json]
+    context_window: 262144
+    default_num_ctx: 8192
+    approx_ram_gb: 3.0
+    quality_tier: 3
+    speed_tier: 1
+
+# -----------------------------------------------------------------------------
+# Lanes: ordered candidate lists. The router picks a lane; policy.py picks the
+# first candidate satisfying capability, context and health constraints.
+# -----------------------------------------------------------------------------
+lanes:
+  reasoning: [reasoning.primary, reasoning.fast, reasoning.alt]
+  coding:    [coding.primary, reasoning.primary, reasoning.fast]
+  long_ctx:  [longctx.primary, reasoning.primary]
+  vision:    [vision.primary, vision.small]   # no text-only fallback: see note below
+  embedding: [embed.primary]
+  utility:   [utility.small, reasoning.fast]
+
+# A vision request has exactly one candidate on purpose. Silently degrading an
+# image question to a text model produces a confident answer about an image the
+# model never saw — worse than an honest failure.
+
+# -----------------------------------------------------------------------------
+# Reranking runs as a local cross-encoder, not through any chat provider, and
+# degrades to plain RRF when unavailable.
+# -----------------------------------------------------------------------------
+rerank:
+  enabled: true
+  backend: sentence_transformers
+  model: BAAI/bge-reranker-v2-m3
+  device: auto               # mps on Apple Silicon, cuda on the server
+  approx_ram_gb: 1.3
+  timeout_s: 2.0             # on timeout, keep the RRF ordering
+  top_n_in: 24
+  top_n_out: 8
+
+# -----------------------------------------------------------------------------
+# Profiles trade quality against latency and memory.
+#   quality  — best model available, swap freely
+#   balanced — prefer an already-resident adequate model (default)
+#   fast     — never swap; use whatever is loaded
+#   demo     — pinned working set, swapping forbidden. Use this on stage.
+# -----------------------------------------------------------------------------
+profiles:
+  quality:
+    prefer: quality_tier
+    allow_swap: true
+    max_resident_gb: 16.0
+  balanced:
+    prefer: loaded_then_quality
+    allow_swap: true
+    max_resident_gb: 14.0
+  fast:
+    prefer: speed_tier
+    allow_swap: false
+    max_resident_gb: 10.0
+  demo:
+    prefer: loaded_then_quality
+    allow_swap: false
+    max_resident_gb: 12.0
+    pin: [utility.small, embed.primary, reasoning.primary, vision.primary]

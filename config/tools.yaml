@@ -1,0 +1,41 @@
+# =============================================================================
+# Tool enablement and approval policy.
+#
+# The DISPATCHER decides approval, never the model. `requires_approval` here is
+# unioned with the ToolSpec default and with dynamic policy (anything touching a
+# restricted document always requires approval).
+#
+# A tool the principal may not use is not merely blocked — it is absent from the
+# catalogue shown to the planner, so the model cannot even propose it.
+# =============================================================================
+version: 1
+
+defaults:
+  timeout_s: 60
+  max_concurrency: 4
+
+tools:
+  rag.search:           {enabled: true,  requires_approval: false, timeout_s: 30}
+  rag.fetch_document:   {enabled: true,  requires_approval: false, timeout_s: 20}
+  kb.tag_lookup:        {enabled: true,  requires_approval: false, timeout_s: 10}
+  table.query:          {enabled: true,  requires_approval: false, timeout_s: 30}
+  doc.summarize_long:   {enabled: true,  requires_approval: false, timeout_s: 180}
+  calc.engineering:     {enabled: true,  requires_approval: false, timeout_s: 10}
+  vision.analyze_image: {enabled: true,  requires_approval: false, timeout_s: 120}
+  ocr.extract:          {enabled: true,  requires_approval: false, timeout_s: 120}
+  artifact.chart:       {enabled: true,  requires_approval: false, timeout_s: 30}
+
+  # --- everything below produces a durable output or runs code -> gated ---
+  code.run_python:      {enabled: true,  requires_approval: true,  timeout_s: 60}
+  artifact.docx:        {enabled: true,  requires_approval: true,  timeout_s: 60}
+  artifact.pptx:        {enabled: true,  requires_approval: true,  timeout_s: 60}
+  artifact.xlsx:        {enabled: true,  requires_approval: true,  timeout_s: 60}
+  artifact.pdf_report:  {enabled: true,  requires_approval: true,  timeout_s: 90}
+
+policy:
+  # Any run that touched a restricted document must be approved before delivery,
+  # regardless of which tools it used.
+  restricted_source_forces_approval: true
+  # Engineering calculations are advisory until a human signs them off.
+  engineering_calc_forces_final_approval: true
+  approval_expiry_hours: 24

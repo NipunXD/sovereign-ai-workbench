@@ -1,0 +1,80 @@
+# =============================================================================
+# Recorded responses for the deterministic mock provider.
+#
+# Keys are either:
+#   * a content hash of (model, messages, schema) — produced by
+#     MockProvider.fixture_key(), and written to mock_misses.jsonl when a
+#     request finds no fixture; or
+#   * a friendly name, addressed by passing metadata={"fixture": "<name>"}.
+#
+# Named fixtures are far easier to maintain by hand, so most tests use those.
+# Anything not listed here is synthesised: schema-valid if a JSON schema was
+# requested, otherwise a visibly-fake echo. That means a new test runs before
+# its fixture exists, which is deliberate.
+# =============================================================================
+responses:
+  # --- routing ---------------------------------------------------------------
+  router_classify_coding:
+    text: '{"lane":"coding","confidence":0.94,"reason":"asks for a script"}'
+
+  router_classify_reasoning:
+    text: '{"lane":"reasoning","confidence":0.88,"reason":"asks for an explanation"}'
+
+  # --- agent planning --------------------------------------------------------
+  plan_corrosion_rate:
+    text: |
+      {"steps":[
+        {"id":"s1","intent":"retrieve","tool":"rag.search",
+         "args_sketch":{"query":"V-1201 shell thickness readings 2023 2024 2025"}},
+        {"id":"s2","intent":"tool","tool":"calc.engineering",
+         "args_sketch":{"calculation":"corrosion_rate"}},
+        {"id":"s3","intent":"synthesize","tool":null,"args_sketch":{}}
+      ]}
+
+  plan_simple_lookup:
+    text: |
+      {"steps":[
+        {"id":"s1","intent":"retrieve","tool":"rag.search","args_sketch":{"query":"hold time"}},
+        {"id":"s2","intent":"synthesize","tool":null,"args_sketch":{}}
+      ]}
+
+  # --- retrieval sufficiency -------------------------------------------------
+  sufficiency_ok:
+    text: '{"sufficient":true,"missing":[]}'
+
+  sufficiency_insufficient:
+    text: '{"sufficient":false,"missing":["2025 inspection report"]}'
+
+  # --- synthesis -------------------------------------------------------------
+  synthesize_grounded:
+    text: |
+      The specified hold time is 4 hours at 120 degC [[cite:chunk_demo_1]], and the
+      depressurisation rate must not exceed 2 bar per minute [[cite:chunk_demo_2]].
+
+  synthesize_refusal:
+    text: |
+      The indexed documents do not contain this information. No SOP in the corpus
+      specifies a purge duration for this vessel, so I cannot answer from the
+      available sources.
+
+  # --- grounding judge -------------------------------------------------------
+  grounding_supported:
+    text: '{"verdicts":[{"sentence_idx":0,"verdict":"supported"}]}'
+
+  grounding_unsupported:
+    text: '{"verdicts":[{"sentence_idx":0,"verdict":"unsupported"}]}'
+
+  # --- vision ----------------------------------------------------------------
+  vision_pid_valves:
+    text: |
+      {"answer":"V-1201 is isolated from the flare header by valves HV-1205 and XV-1207.",
+       "detected_elements":[
+         {"tag":"HV-1205","equipment_type":"control valve","bbox":[0.31,0.44,0.36,0.49]},
+         {"tag":"XV-1207","equipment_type":"shutdown valve","bbox":[0.52,0.41,0.57,0.46]}
+       ],
+       "confidence":0.86}
+
+  vision_handwriting:
+    text: |
+      {"answer":"Handwritten annotation reads: 'Thickness 9.2mm at CML-4, recheck Q3'",
+       "detected_elements":[],"confidence":0.71}

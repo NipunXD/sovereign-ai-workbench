@@ -1,0 +1,124 @@
+[project]
+name = "workbench-monorepo"
+version = "0.1.0"
+description = "Sovereign On-Premise Agentic AI Workbench — SIH 2026 PS 26117 (MRPL), Team AIDUO"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[tool.uv.workspace]
+members = ["apps/api", "evals"]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+workbench = { workspace = true }
+
+# ----------------------------------------------------------------------------
+# Lint / format / types — shared across every workspace member
+# ----------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["apps/api/src", "evals"]
+extend-exclude = ["apps/api/migrations/versions"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle
+    "F",         # pyflakes
+    "I",         # isort
+    "N",         # pep8-naming
+    "UP",        # pyupgrade
+    "B",         # bugbear
+    "C4",        # comprehensions
+    "SIM",       # simplify
+    "TID",       # tidy imports
+    "PTH",       # use pathlib
+    "RUF",       # ruff-specific
+    "ASYNC",     # async correctness
+    "S",         # bandit (security)
+]
+ignore = [
+    "E501",    # line length is handled by the formatter
+    "B008",    # FastAPI Depends() in defaults is the framework idiom
+    "S101",    # assert is fine in tests
+]
+
+[tool.ruff.lint.per-file-ignores]
+"apps/api/tests/**" = ["S", "N806"]
+"evals/**" = ["S"]
+"services/sandbox/**" = ["S"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["workbench", "evals"]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+no_implicit_reexport = true
+exclude = ["apps/api/migrations/versions/", "\\.venv/"]
+
+[[tool.mypy.overrides]]
+module = [
+    "qdrant_client.*", "faiss.*", "rapidocr_onnxruntime.*", "cv2.*",
+    "docker.*", "pptx.*", "docx.*", "openpyxl.*", "fitz.*", "pint.*",
+    "sentence_transformers.*", "arq.*", "langgraph.*", "matplotlib.*",
+    "duckdb.*", "magic.*", "reportlab.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+asyncio_mode = "auto"
+testpaths = ["apps/api/tests", "tests"]
+pythonpath = ["apps/api/src"]
+addopts = "-q --strict-markers --strict-config"
+markers = [
+    "docker: requires a working Docker daemon",
+    "ollama: requires a running Ollama with the model manifest pulled",
+    "slow: takes more than a few seconds",
+    "e2e: full-stack end-to-end test",
+]
+filterwarnings = ["error", "ignore::DeprecationWarning:passlib.*"]
+
+[tool.coverage.run]
+source = ["apps/api/src/workbench"]
+omit = ["*/migrations/*", "*/tests/*"]
+
+# ----------------------------------------------------------------------------
+# Module boundary enforcement (see docs/01-architecture.md)
+# api -> agent -> tools -> {rag,ingest,artifacts,sandbox,providers} -> db/core
+# ----------------------------------------------------------------------------
+[tool.importlinter]
+root_packages = ["workbench"]
+include_external_packages = false
+
+[[tool.importlinter.contracts]]
+name = "Layered architecture"
+type = "layers"
+layers = [
+    "workbench.api",
+    "workbench.agent",
+    "workbench.tools",
+    "workbench.rag | workbench.ingest | workbench.artifacts | workbench.sandbox | workbench.router",
+    "workbench.providers",
+    "workbench.security",
+    "workbench.db",
+    "workbench.core",
+]
+exhaustive = false
+
+[[tool.importlinter.contracts]]
+name = "Workers may not be imported by the request path"
+type = "forbidden"
+source_modules = ["workbench.api", "workbench.agent", "workbench.rag", "workbench.ingest"]
+forbidden_modules = ["workbench.workers"]

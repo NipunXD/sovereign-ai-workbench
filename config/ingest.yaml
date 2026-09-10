@@ -1,0 +1,72 @@
+# =============================================================================
+# Ingestion pipeline tuning. These numbers are measured by evals/suites/eval_ocr.py
+# and evals/suites/eval_retrieval.py — change them and the baselines move.
+# =============================================================================
+version: 1
+
+limits:
+  max_upload_mb: 200
+  max_pages: 2000
+  allowed_mime:
+    - application/pdf
+    - image/png
+    - image/jpeg
+    - image/tiff
+    - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+    - application/vnd.openxmlformats-officedocument.presentationml.presentation
+    - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+    - text/csv
+    - text/plain
+    - message/rfc822
+
+render:
+  viewer_dpi: 150        # page PNGs served to the document viewer
+  ocr_dpi: 300           # higher-resolution cache used for text extraction
+
+ocr:
+  engine: rapidocr       # rapidocr | tesseract  (same OCREngine protocol)
+  languages: [en]
+  preprocess:
+    deskew: true
+    denoise: true
+    clahe: true
+    adaptive_threshold: true
+    min_effective_dpi: 300
+  # Escalation to the VLM. A scanned page that trips any of these gets a second
+  # pass from vision.primary, and the merged result records source="vlm".
+  escalation:
+    min_mean_confidence: 0.72
+    min_words_per_page: 30
+    always_escalate_block_types: [figure, drawing_annotation, handwriting]
+
+vision:
+  pid_tiling:
+    tile_px: 1024        # VLMs degrade badly on a whole A1 sheet
+    overlap_px: 128
+  # A tag the VLM reports is only trusted if OCR or the tag registry confirms it.
+  tag_regex: "^[A-Z]{1,3}-?[0-9]{3,5}[A-Z]?$"
+  require_tag_cross_validation: true
+
+chunking:
+  child_tokens: 256      # indexed
+  parent_tokens: 900     # returned to the model
+  overlap_tokens: 32
+  respect_headings: true
+  never_split_table_rows: true
+  spreadsheet_rows_per_chunk: 20
+
+retrieval:
+  dense_k: 40
+  sparse_k: 40
+  rrf_k: 60
+  dense_weight: 1.0
+  sparse_weight: 0.8
+  final_k: 8
+  # Chunks extracted from low-confidence OCR are penalised, not excluded — the
+  # user still sees them, flagged, rather than silently losing the information.
+  low_confidence_penalty: 0.15
+
+grounding:
+  sentence_similarity_floor: 0.55
+  min_grounded_ratio: 0.80     # below this, the agent loops back to retrieve
+  max_validate_loops: 2
