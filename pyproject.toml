@@ -66,9 +66,9 @@ exclude = ["apps/api/migrations/versions/", "\\.venv/"]
 [[tool.mypy.overrides]]
 module = [
     "qdrant_client.*", "faiss.*", "rapidocr_onnxruntime.*", "cv2.*",
-    "docker.*", "pptx.*", "docx.*", "openpyxl.*", "fitz.*", "pint.*",
+    "docker.*", "pptx.*", "docx.*", "openpyxl.*", "pymupdf.*", "pint.*",
     "sentence_transformers.*", "arq.*", "langgraph.*", "matplotlib.*",
-    "duckdb.*", "magic.*", "reportlab.*",
+    "duckdb.*", "reportlab.*",
 ]
 ignore_missing_imports = true
 
