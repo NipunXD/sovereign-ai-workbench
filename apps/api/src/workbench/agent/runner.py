@@ -693,10 +693,52 @@ class AgentRunner:
             report.unsupported = sentences[:5]
             return report
 
-        cited = sum(1 for s in sentences if re.search(r"\[\d+\]", s))
-        report.grounded_ratio = cited / len(sentences)
-        report.unsupported = [s for s in sentences if not re.search(r"\[\d+\]", s)][:5]
+        report.grounded_ratio, report.unsupported = self._coverage(resolved.text)
         return report
+
+    @staticmethod
+    def _coverage(text: str) -> tuple[float, list[str]]:
+        """What fraction of the answer's claims carry a citation.
+
+        Counted per paragraph rather than per sentence. Models cite the way
+        people do — once at the end of a passage, and often on its own line
+        after it — so demanding a marker inside every sentence reports a
+        correctly-cited answer as completely ungrounded. A false alarm here is
+        worse than no metric at all: it teaches the reader to ignore the badge,
+        and the badge is the whole point.
+        """
+        import re
+
+        marker = re.compile(r"\[\d+\]")
+        paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+
+        # A paragraph that is nothing but markers is the citation for the one
+        # before it, not an uncited claim of its own.
+        merged: list[str] = []
+        for paragraph in paragraphs:
+            if merged and not marker.sub("", paragraph).strip():
+                merged[-1] = f"{merged[-1]} {paragraph}"
+            else:
+                merged.append(paragraph)
+
+        # A claim is a paragraph with enough words to assert something. Counted
+        # in words rather than characters: "The limit is 2 bar per minute [1]."
+        # is a real claim but only 22 letters, and a character threshold
+        # silently dropped exactly the short, well-cited sentences this system
+        # is trying to encourage.
+        def is_claim(paragraph: str) -> bool:
+            body = marker.sub("", paragraph).strip()
+            if body.startswith("#"):  # a markdown heading asserts nothing
+                return False
+            return len(re.findall(r"[A-Za-z][A-Za-z'-]*", body)) >= 4
+
+        claim_paragraphs = [p for p in merged if is_claim(p)]
+        if not claim_paragraphs:
+            return 1.0, []
+
+        cited = [p for p in claim_paragraphs if marker.search(p)]
+        uncited = [p for p in claim_paragraphs if not marker.search(p)]
+        return len(cited) / len(claim_paragraphs), [p[:200] for p in uncited[:5]]
 
     # ------------------------------------------------------------- helpers
     async def _generate(

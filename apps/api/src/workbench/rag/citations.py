@@ -187,7 +187,12 @@ def resolve_markers(text: str, evidence: list[EvidenceItem]) -> ResolvedAnswer:
     reference list reads in the order the reader encounters it. A marker citing
     a chunk that was never retrieved is dropped and recorded.
     """
-    by_id = {item.chunk_id: item for item in evidence}
+    # Keyed case-insensitively. Models copy the *style* of the placeholder in
+    # the instructions, so a prompt showing `[[cite:CHUNK_ID]]` reliably
+    # produces `[[cite:CHK_01M25...]]` against an id of `chk_01M25...`. A
+    # case-sensitive lookup scores a correctly-cited answer as 0% grounded and
+    # reports every real citation as a hallucination.
+    by_id = {item.chunk_id.casefold(): item for item in evidence}
     assigned: dict[str, int] = {}
     citations: list[Citation] = []
     unresolved: list[str] = []
@@ -195,7 +200,7 @@ def resolve_markers(text: str, evidence: list[EvidenceItem]) -> ResolvedAnswer:
     def replace(match: re.Match[str]) -> str:
         numbers: list[int] = []
         for chunk_id in _marker_ids(match.group(1)):
-            item = by_id.get(chunk_id)
+            item = by_id.get(chunk_id.casefold())
             if item is None:
                 unresolved.append(chunk_id)
                 continue

@@ -160,3 +160,23 @@ def test_no_raw_marker_survives_resolution() -> None:
         "x [[cite:unknown]] y",
     ):
         assert "[[" not in resolve_markers(text, evidence).text, text
+
+
+def test_citation_id_matching_is_case_insensitive() -> None:
+    """Models copy the case of the placeholder, not of the actual id.
+
+    A prompt showing `[[cite:CHUNK_ID]]` reliably produces `[[cite:CHK_01M2...]]`
+    against an id of `chk_01M2...`. Matching case-sensitively scored a correctly
+    cited answer as 0% grounded and reported every real citation as invented —
+    the worst possible failure for a system whose premise is grounding.
+    """
+    evidence = [item("chk_01M25VN9")]
+    for marker in ("chk_01M25VN9", "CHK_01M25VN9", "Chk_01m25vn9"):
+        result = resolve_markers(f"A claim [[cite:{marker}]].", evidence)
+        assert result.text == "A claim [1].", marker
+        assert not result.unresolved, marker
+
+
+def test_case_insensitivity_does_not_excuse_an_invented_id() -> None:
+    result = resolve_markers("A claim [[cite:CHK_DOESNOTEXIST]].", [item("chk_01M25VN9")])
+    assert result.unresolved == ["CHK_DOESNOTEXIST"]

@@ -199,6 +199,52 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     log.info("workbench_stopped")
 
 
+class RequestContextMiddleware:
+    """Attach a correlation id to every request, as raw ASGI middleware.
+
+    Deliberately not written with ``@app.middleware("http")``. That builds a
+    Starlette ``BaseHTTPMiddleware``, which pumps the response through an anyio
+    memory stream — and that wrapper cancels long-lived streaming responses part
+    way through. The symptom is a chat run that dies silently after a minute,
+    mid-trace, with a CancelledError buried in the connection pool. Since every
+    interesting endpoint here streams, the middleware has to leave the response
+    alone.
+    """
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers", [])}
+        request_id = headers.get("x-request-id") or f"req_{new_id()}"
+        started = time.perf_counter()
+        bind_request_context(
+            request_id=request_id,
+            path=scope.get("path", ""),
+            method=scope.get("method", ""),
+        )
+
+        async def send_wrapper(message: Any) -> None:
+            if message["type"] == "http.response.start":
+                elapsed = (time.perf_counter() - started) * 1000
+                message.setdefault("headers", [])
+                message["headers"] = [
+                    *message["headers"],
+                    (b"x-request-id", request_id.encode("latin-1")),
+                    (b"x-response-time-ms", f"{elapsed:.1f}".encode("latin-1")),
+                ]
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_wrapper)
+        finally:
+            clear_request_context()
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
 
@@ -224,19 +270,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
-    @app.middleware("http")
-    async def request_context(request: Request, call_next: Any) -> Any:
-        """Tag every log line and response with a correlation id."""
-        request_id = request.headers.get("x-request-id") or f"req_{new_id()}"
-        started = time.perf_counter()
-        bind_request_context(request_id=request_id, path=request.url.path, method=request.method)
-        try:
-            response = await call_next(request)
-        finally:
-            clear_request_context()
-        response.headers["x-request-id"] = request_id
-        response.headers["x-response-time-ms"] = f"{(time.perf_counter() - started) * 1000:.1f}"
-        return response
+    app.add_middleware(RequestContextMiddleware)
 
     @app.exception_handler(AppError)
     async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:

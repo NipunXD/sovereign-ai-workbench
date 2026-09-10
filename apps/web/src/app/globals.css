@@ -1,0 +1,151 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * Dark is the default, not an option.
+ *
+ * This runs in a refinery control room on long shifts. A light theme is
+ * provided for printing and for daylight offices, but the product's resting
+ * state is dark because that is where it lives.
+ */
+@layer base {
+  :root {
+    --bg: 222 20% 9%;
+    --surface: 222 18% 12%;
+    --surface-raised: 222 16% 16%;
+    --border: 222 14% 22%;
+    --border-strong: 222 14% 32%;
+    --fg: 210 20% 92%;
+    --fg-muted: 215 14% 65%;
+    --fg-subtle: 215 12% 48%;
+    --accent: 33 95% 58%;
+    --accent-fg: 24 40% 8%;
+    --accent-muted: 33 60% 22%;
+  }
+
+  :root[data-theme="light"] {
+    --bg: 210 20% 97%;
+    --surface: 0 0% 100%;
+    --surface-raised: 210 20% 99%;
+    --border: 215 16% 87%;
+    --border-strong: 215 16% 74%;
+    --fg: 222 25% 14%;
+    --fg-muted: 215 14% 40%;
+    --fg-subtle: 215 12% 52%;
+    --accent: 28 90% 46%;
+    --accent-fg: 0 0% 100%;
+    --accent-muted: 33 80% 90%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body {
+    @apply h-full;
+  }
+
+  body {
+    @apply bg-bg text-fg antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "tnum";
+  }
+
+  /* Tabular figures everywhere numbers are compared down a column — thickness
+     readings that do not line up are readings you cannot scan. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    @apply bg-accent/30;
+  }
+
+  /* A thin, unobtrusive scrollbar: the trace panel and document list are both
+     long, and a chunky default bar eats real estate in a dense layout. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border-strong)) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border-strong));
+    border-radius: 4px;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent/70 ring-offset-1 ring-offset-bg;
+  }
+}
+
+@layer components {
+  /* The panel is the fundamental unit of this UI — an instrument on a rack. */
+  .panel {
+    @apply rounded-md border border-border bg-surface;
+  }
+
+  .panel-header {
+    @apply flex h-9 items-center justify-between gap-2 border-b border-border px-3
+           text-2xs font-semibold uppercase tracking-wider text-fg-subtle;
+  }
+
+  .tag {
+    @apply font-mono text-xs tracking-tight;
+  }
+
+  /* Markdown produced by the model. Constrained deliberately: the answer sits
+     in a dense layout and unbounded heading sizes would wreck it. */
+  .prose-answer {
+    @apply text-base leading-relaxed text-fg;
+  }
+  .prose-answer > * + * {
+    @apply mt-3;
+  }
+  .prose-answer h1,
+  .prose-answer h2,
+  .prose-answer h3 {
+    @apply mt-4 text-sm font-semibold uppercase tracking-wide text-fg-muted;
+  }
+  .prose-answer ul,
+  .prose-answer ol {
+    @apply ml-4 space-y-1;
+  }
+  .prose-answer ul {
+    @apply list-disc;
+  }
+  .prose-answer ol {
+    @apply list-decimal;
+  }
+  .prose-answer code {
+    @apply rounded bg-surface-raised px-1 py-0.5 font-mono text-xs;
+  }
+  .prose-answer pre {
+    @apply overflow-x-auto rounded border border-border bg-surface-raised p-3;
+  }
+  .prose-answer pre code {
+    @apply bg-transparent p-0;
+  }
+  .prose-answer table {
+    @apply w-full border-collapse text-xs;
+  }
+  .prose-answer th,
+  .prose-answer td {
+    @apply border border-border px-2 py-1 text-left;
+  }
+  .prose-answer th {
+    @apply bg-surface-raised font-semibold;
+  }
+  .prose-answer strong {
+    @apply font-semibold text-fg;
+  }
+  .prose-answer a {
+    @apply text-accent underline underline-offset-2;
+  }
+}
