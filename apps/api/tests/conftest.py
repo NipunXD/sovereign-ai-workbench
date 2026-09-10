@@ -54,6 +54,16 @@ def router_config_path() -> Path:
 
 
 @pytest.fixture
+def rbac_config_path() -> Path:
+    return REPO_ROOT / "config" / "rbac.yaml"
+
+
+@pytest.fixture
+def ingest_config_path() -> Path:
+    return REPO_ROOT / "config" / "ingest.yaml"
+
+
+@pytest.fixture
 def registry(manifest_path: Path) -> ModelRegistry:
     """The real manifest, so tests catch a manifest that stops parsing."""
     return ModelRegistry(manifest_path, fixtures_path=FIXTURES / "mock_responses.yaml")

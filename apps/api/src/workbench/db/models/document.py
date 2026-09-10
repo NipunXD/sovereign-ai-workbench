@@ -1,5 +1,8 @@
 """Documents, pages, blocks and chunks.
 
+``Classification`` is imported from ``core`` and re-exported here for the
+convenience of call sites already dealing in ORM models.
+
 ``chunks`` carries denormalised ``classification`` and ``departments`` columns.
 That duplication is deliberate: the RBAC filter has to run *inside* the vector
 search and the SQL WHERE clause, and a join to reach the parent document would
@@ -16,33 +19,10 @@ from sqlalchemy import Column, Computed, Float, Index, Integer, String, Text, te
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlmodel import Field, SQLModel
 
+from workbench.core.classification import Classification
 from workbench.core.clock import now
 from workbench.core.ids import prefixed_id
 from workbench.db.base import UTCDateTime
-
-
-class Classification:
-    """Document sensitivity ladder. Order matters for comparisons."""
-
-    PUBLIC = "public"
-    INTERNAL = "internal"
-    CONFIDENTIAL = "confidential"
-    RESTRICTED = "restricted"
-
-    ORDER = [PUBLIC, INTERNAL, CONFIDENTIAL, RESTRICTED]
-
-    @classmethod
-    def rank(cls, value: str) -> int:
-        try:
-            return cls.ORDER.index(value)
-        except ValueError:
-            # Unknown labels are treated as maximally sensitive. Failing closed
-            # is the only safe default for a classification system.
-            return len(cls.ORDER)
-
-    @classmethod
-    def at_or_below(cls, clearance: str) -> list[str]:
-        return cls.ORDER[: cls.rank(clearance) + 1]
 
 
 class DocStatus:
