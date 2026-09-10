@@ -74,9 +74,17 @@ module = [
     "qdrant_client.*", "faiss.*", "rapidocr_onnxruntime.*", "cv2.*",
     "docker.*", "pptx.*", "docx.*", "openpyxl.*", "pymupdf.*", "pint.*",
     "sentence_transformers.*", "arq.*", "langgraph.*", "matplotlib.*",
-    "duckdb.*", "reportlab.*",
+    "duckdb.*", "reportlab.*", "pytesseract.*", "pandas.*", "fitz.*",
 ]
 ignore_missing_imports = true
+
+# PyMuPDF and python-pptx ship a py.typed marker but leave their own
+# functions unannotated, so every call into them is reported. Our code is
+# still checked — disallow_untyped_defs means this code can only ever fire
+# on calls into those libraries.
+[[tool.mypy.overrides]]
+module = ["workbench.ingest.extractors.pdf", "workbench.artifacts.pptx_builder"]
+disable_error_code = ["no-untyped-call"]
 
 [[tool.mypy.overrides]]
 module = "tests.*"
@@ -89,7 +97,9 @@ asyncio_mode = "auto"
 # client created on one loop cannot be awaited on another.
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["apps/api/tests", "tests"]
-pythonpath = ["apps/api/src"]
+# The repo root too, so the eval harness (evals/) imports without a
+# PYTHONPATH set by hand — tests/evals covers its metrics.
+pythonpath = ["apps/api/src", "."]
 addopts = "-q --strict-markers --strict-config"
 markers = [
     "docker: requires a working Docker daemon",
@@ -120,7 +130,15 @@ layers = [
     "workbench.api",
     "workbench.agent",
     "workbench.tools",
-    "workbench.rag | workbench.ingest | workbench.artifacts | workbench.sandbox | workbench.router",
+    # Ingestion sits *above* retrieval, because that is the real relationship:
+    # the indexer's job is to write chunks into the vector store, so it depends
+    # on the embedder and the store. Listing them as siblings said they were
+    # independent, which they never were — and the violation it produced was
+    # unfixable without inverting a dependency that points the right way.
+    # The reverse direction is now genuinely absent: the shared document types
+    # moved to workbench.core.ir, which is what freed retrieval from ingestion.
+    "workbench.ingest",
+    "workbench.rag | workbench.artifacts | workbench.sandbox | workbench.router",
     "workbench.providers",
     "workbench.security",
     "workbench.db",

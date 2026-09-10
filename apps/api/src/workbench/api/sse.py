@@ -12,6 +12,7 @@ import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
+from workbench.core.event_names import EventName as EventName
 from workbench.core.events import Event, EventBus
 from workbench.core.hashing import canonical_json
 from workbench.core.logging import get_logger
@@ -21,34 +22,6 @@ log = get_logger(__name__)
 #: Comment frames keep intermediaries from closing an idle connection while a
 #: model is thinking. A long agentic step can be silent for a while.
 HEARTBEAT_INTERVAL_S = 15.0
-
-
-class EventName:
-    """The trace vocabulary. The frontend switches on these exact strings."""
-
-    RUN_STARTED = "run_started"
-    ROUTE_DECISION = "route_decision"
-    PLAN_CREATED = "plan_created"
-    STEP_STARTED = "step_started"
-    STEP_FINISHED = "step_finished"
-    RETRIEVAL_RESULT = "retrieval_result"
-    TOOL_CALL = "tool_call"
-    TOOL_RESULT = "tool_result"
-    #: Answer text. One per token-ish fragment.
-    TOKEN = "token"  # noqa: S105 — an SSE event name, not a credential
-    #: The model's internal monologue, on a separate channel so it can never be
-    #: mistaken for the answer.
-    REASONING = "reasoning"
-    #: The complete answer with citation markers resolved to [1], [2].
-    #: Citation markers span sentences, so they can only be rewritten once the
-    #: whole text exists — the UI renders tokens live and swaps this in at the end.
-    ANSWER = "answer"
-    CITATION = "citation"
-    ARTIFACT_CREATED = "artifact_created"
-    VALIDATION = "validation"
-    APPROVAL_REQUIRED = "approval_required"
-    ERROR = "error"
-    RUN_FINISHED = "run_finished"
 
 
 def format_sse(name: str, data: dict[str, Any], *, seq: int | None = None) -> str:

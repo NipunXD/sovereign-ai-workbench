@@ -18,8 +18,10 @@ from typing import Any
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col
 
 from workbench.core.classification import Classification
+from workbench.core.ir import DocumentIR
 from workbench.core.logging import get_logger
 from workbench.db.models import (
     Chunk,
@@ -29,7 +31,6 @@ from workbench.db.models import (
     DocumentBlock,
     DocumentPage,
 )
-from workbench.ingest.ir import DocumentIR
 from workbench.rag.embedder import Embedder
 from workbench.rag.vectorstore.base import VectorPoint, VectorStore
 
@@ -239,10 +240,12 @@ class DocumentIndexer:
         """
         await self.vector_store.delete_by_doc(document_id)
         for model in (Chunk, DocumentBlock, DocumentPage, Dataset):
-            await session.execute(delete(model).where(model.document_id == document_id))
-        await session.execute(delete(Document).where(Document.id == document_id))
+            # col() takes a column, and `model` here is the class itself, so
+            # the attribute is resolved dynamically and cannot be typed.
+            await session.execute(delete(model).where(col(model.document_id) == document_id))
+        await session.execute(delete(Document).where(col(Document.id) == document_id))
 
     async def find_by_hash(self, session: AsyncSession, sha256: str) -> Document | None:
         return (
-            await session.execute(select(Document).where(Document.sha256 == sha256))
+            await session.execute(select(Document).where(col(Document.sha256) == sha256))
         ).scalar_one_or_none()

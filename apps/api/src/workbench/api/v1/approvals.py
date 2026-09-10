@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlmodel import col
 
 from workbench.api.deps import Audit, CurrentPrincipal, DbSession, require_permission
 from workbench.core.errors import NotFoundError
@@ -70,7 +71,7 @@ async def _serialise(session: DbSession, approval: Approval, principal: Principa
     name = None
     if approval.requested_by:
         user = (
-            await session.execute(select(User).where(User.id == approval.requested_by))
+            await session.execute(select(User).where(col(User.id) == approval.requested_by))
         ).scalar_one_or_none()
         name = user.full_name or user.username if user else None
     return ApprovalOut(
@@ -104,11 +105,11 @@ async def list_approvals(
     Visible to anyone who can approve *or* who raised a request — an engineer
     needs to see that their report is waiting on someone.
     """
-    query = select(Approval).order_by(Approval.requested_at.desc()).limit(limit)
+    query = select(Approval).order_by(col(Approval.requested_at).desc()).limit(limit)
     if status != "all":
-        query = query.where(Approval.status == status)
+        query = query.where(col(Approval.status) == status)
     if not principal.has("artifact:approve") and not principal.has("run:approve"):
-        query = query.where(Approval.requested_by == principal.user_id)
+        query = query.where(col(Approval.requested_by) == principal.user_id)
 
     approvals = list((await session.execute(query)).scalars())
     return [await _serialise(session, approval, principal) for approval in approvals]
@@ -137,7 +138,9 @@ async def decide(
     # downloaded as though it had been signed off.
     if approval.subject_type == "artifact":
         artifact = (
-            await session.execute(select(Artifact).where(Artifact.sha256 == approval.subject_id))
+            await session.execute(
+                select(Artifact).where(col(Artifact.sha256) == approval.subject_id)
+            )
         ).scalar_one_or_none()
         if artifact is not None:
             artifact.status = (
@@ -161,9 +164,9 @@ async def list_artifacts(
     status: str | None = None,
     limit: int = 50,
 ) -> list[ArtifactOut]:
-    query = select(Artifact).order_by(Artifact.created_at.desc()).limit(limit)
+    query = select(Artifact).order_by(col(Artifact.created_at).desc()).limit(limit)
     if status:
-        query = query.where(Artifact.status == status)
+        query = query.where(col(Artifact.status) == status)
     artifacts = list((await session.execute(query)).scalars())
     return [
         ArtifactOut(
@@ -199,7 +202,7 @@ async def download_artifact(
     unapproved report and send it on.
     """
     artifact = (
-        await session.execute(select(Artifact).where(Artifact.sha256 == sha256))
+        await session.execute(select(Artifact).where(col(Artifact.sha256) == sha256))
     ).scalar_one_or_none()
     if artifact is None:
         raise NotFoundError("No such artifact.")

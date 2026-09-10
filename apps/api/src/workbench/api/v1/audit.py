@@ -18,6 +18,8 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
+from sqlalchemy.sql.elements import ColumnElement
+from sqlmodel import col
 
 from workbench.api.deps import Audit, DbSession, require_permission
 from workbench.core.clock import now
@@ -103,30 +105,36 @@ async def list_events(
     offset: int = Query(default=0, ge=0),
 ) -> AuditPage:
     """Read the log, newest first."""
-    conditions = []
+    # Annotated, and each field wrapped in col(): SQLModel declares these
+    # fields as their Python types, so `AuditEvent.action == action` looks like
+    # a bool to a type checker and like a SQL expression to SQLAlchemy. col()
+    # says which one is meant.
+    conditions: list[ColumnElement[bool]] = []
     if actor:
-        conditions.append(AuditEvent.actor_username == actor)
+        conditions.append(col(AuditEvent.actor_username) == actor)
     if action:
-        conditions.append(AuditEvent.action == action)
+        conditions.append(col(AuditEvent.action) == action)
     if decision:
-        conditions.append(AuditEvent.decision == decision)
+        conditions.append(col(AuditEvent.decision) == decision)
     if run_id:
-        conditions.append(AuditEvent.run_id == run_id)
+        conditions.append(col(AuditEvent.run_id) == run_id)
     if since_hours:
-        conditions.append(AuditEvent.ts >= now() - timedelta(hours=since_hours))
+        conditions.append(col(AuditEvent.ts) >= now() - timedelta(hours=since_hours))
 
     query = select(AuditEvent)
     for condition in conditions:
         query = query.where(condition)
 
-    total_query = select(func.count(AuditEvent.id))
+    total_query = select(func.count(col(AuditEvent.id)))
     for condition in conditions:
         total_query = total_query.where(condition)
     total = (await session.execute(total_query)).scalar_one()
 
     events = list(
         (
-            await session.execute(query.order_by(AuditEvent.seq.desc()).limit(limit).offset(offset))
+            await session.execute(
+                query.order_by(col(AuditEvent.seq).desc()).limit(limit).offset(offset)
+            )
         ).scalars()
     )
 
@@ -134,17 +142,19 @@ async def list_events(
     actions = [
         row[0]
         for row in (
-            await session.execute(select(AuditEvent.action).distinct().order_by(AuditEvent.action))
+            await session.execute(
+                select(col(AuditEvent.action)).distinct().order_by(col(AuditEvent.action))
+            )
         ).all()
     ]
     actors = [
         row[0]
         for row in (
             await session.execute(
-                select(AuditEvent.actor_username)
+                select(col(AuditEvent.actor_username))
                 .distinct()
-                .where(AuditEvent.actor_username.is_not(None))
-                .order_by(AuditEvent.actor_username)
+                .where(col(AuditEvent.actor_username).is_not(None))
+                .order_by(col(AuditEvent.actor_username))
             )
         ).all()
     ]
@@ -199,9 +209,9 @@ async def export(
     checked by someone who does not have access to this system at all — which
     is the point of an evidence bundle.
     """
-    query = select(AuditEvent).order_by(AuditEvent.seq)
+    query = select(AuditEvent).order_by(col(AuditEvent.seq))
     if since_hours:
-        query = query.where(AuditEvent.ts >= now() - timedelta(hours=since_hours))
+        query = query.where(col(AuditEvent.ts) >= now() - timedelta(hours=since_hours))
 
     events = list((await session.execute(query)).scalars())
 
@@ -239,10 +249,10 @@ async def summary(
         {"action": row[0], "count": int(row[1])}
         for row in (
             await session.execute(
-                select(AuditEvent.action, func.count(AuditEvent.id))
-                .where(AuditEvent.ts >= since)
-                .group_by(AuditEvent.action)
-                .order_by(func.count(AuditEvent.id).desc())
+                select(col(AuditEvent.action), func.count(col(AuditEvent.id)))
+                .where(col(AuditEvent.ts) >= since)
+                .group_by(col(AuditEvent.action))
+                .order_by(func.count(col(AuditEvent.id)).desc())
             )
         ).all()
     ]
@@ -250,9 +260,9 @@ async def summary(
         row[0]: int(row[1])
         for row in (
             await session.execute(
-                select(AuditEvent.decision, func.count(AuditEvent.id))
-                .where(AuditEvent.ts >= since)
-                .group_by(AuditEvent.decision)
+                select(col(AuditEvent.decision), func.count(col(AuditEvent.id)))
+                .where(col(AuditEvent.ts) >= since)
+                .group_by(col(AuditEvent.decision))
             )
         ).all()
     }
@@ -262,8 +272,8 @@ async def summary(
         (
             await session.execute(
                 select(AuditEvent)
-                .where(AuditEvent.decision == "deny", AuditEvent.ts >= since)
-                .order_by(AuditEvent.seq.desc())
+                .where(col(AuditEvent.decision) == "deny", col(AuditEvent.ts) >= since)
+                .order_by(col(AuditEvent.seq).desc())
                 .limit(10)
             )
         ).scalars()

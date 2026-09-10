@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Any, Protocol
 
 #: The RRF constant. 60 is the value from the original paper and is deliberately
 #: large: it flattens the contribution of rank position so that being 1st rather
@@ -37,7 +37,7 @@ class FusedHit:
     score: float
     #: Rank in each retriever that returned it, for the trace panel.
     ranks: dict[str, int] = field(default_factory=dict)
-    payloads: dict[str, dict] = field(default_factory=dict)
+    payloads: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     @property
     def method(self) -> str:

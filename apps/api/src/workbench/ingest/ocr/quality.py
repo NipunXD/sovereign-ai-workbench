@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from workbench.ingest.ir import BlockType, Page
+from workbench.core.ir import BlockType, Page
 from workbench.ingest.ocr.engine import OcrResult
 
 

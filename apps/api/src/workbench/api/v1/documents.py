@@ -17,7 +17,8 @@ import anyio.to_thread
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
+from sqlmodel import col
 
 from workbench.api.deps import Audit, DbSession, require_permission
 from workbench.api.sse import SSE_HEADERS, format_sse
@@ -65,7 +66,7 @@ class DocumentDetail(DocumentSummary):
 
 def _visible(principal: Principal) -> Any:
     """The clause restricting a query to what this principal may see."""
-    return Document.classification.in_(principal.visible_classifications)
+    return col(Document.classification).in_(principal.visible_classifications)
 
 
 def _summary(document: Document, chunk_count: int = 0) -> DocumentSummary:
@@ -99,33 +100,34 @@ async def list_documents(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> list[DocumentSummary]:
-    query = select(Document).where(Document.deleted_at.is_(None), _visible(principal))
+    query = select(Document).where(col(Document.deleted_at).is_(None), _visible(principal))
     if doc_type:
-        query = query.where(Document.doc_type == doc_type)
+        query = query.where(col(Document.doc_type) == doc_type)
     if status:
-        query = query.where(Document.status == status)
+        query = query.where(col(Document.status) == status)
     if search:
-        query = query.where(Document.title.ilike(f"%{search}%"))
+        query = query.where(col(Document.title).ilike(f"%{search}%"))
 
     documents = list(
         (
             await session.execute(
-                query.order_by(Document.created_at.desc()).limit(limit).offset(offset)
+                query.order_by(col(Document.created_at).desc()).limit(limit).offset(offset)
             )
         ).scalars()
     )
     if not documents:
         return []
 
-    counts = dict(
-        (
+    counts: dict[str, int] = {
+        str(row[0]): int(row[1])
+        for row in (
             await session.execute(
-                select(Chunk.document_id, func.count(Chunk.id))
-                .where(Chunk.document_id.in_([d.id for d in documents]))
-                .group_by(Chunk.document_id)
+                select(col(Chunk.document_id), func.count(col(Chunk.id)))
+                .where(col(Chunk.document_id).in_([d.id for d in documents]))
+                .group_by(col(Chunk.document_id))
             )
         ).all()
-    )
+    }
     return [_summary(d, counts.get(d.id, 0)) for d in documents]
 
 
@@ -138,8 +140,8 @@ async def _load_visible(session: DbSession, document_id: str, principal: Princip
     document = (
         await session.execute(
             select(Document).where(
-                Document.id == document_id,
-                Document.deleted_at.is_(None),
+                col(Document.id) == document_id,
+                col(Document.deleted_at).is_(None),
                 _visible(principal),
             )
         )
@@ -158,7 +160,9 @@ async def get_document(
 ) -> DocumentDetail:
     document = await _load_visible(session, document_id, principal)
     count = (
-        await session.execute(select(func.count(Chunk.id)).where(Chunk.document_id == document.id))
+        await session.execute(
+            select(func.count(col(Chunk.id))).where(col(Chunk.document_id) == document.id)
+        )
     ).scalar_one()
 
     await audit.log(
@@ -189,7 +193,7 @@ async def page_image(
     page = (
         await session.execute(
             select(DocumentPage).where(
-                DocumentPage.document_id == document_id, DocumentPage.page_no == page_no
+                col(DocumentPage.document_id) == document_id, col(DocumentPage.page_no) == page_no
             )
         )
     ).scalar_one_or_none()
@@ -218,7 +222,7 @@ async def page_blocks(
     page = (
         await session.execute(
             select(DocumentPage).where(
-                DocumentPage.document_id == document_id, DocumentPage.page_no == page_no
+                col(DocumentPage.document_id) == document_id, col(DocumentPage.page_no) == page_no
             )
         )
     ).scalar_one_or_none()
@@ -227,10 +231,10 @@ async def page_blocks(
             await session.execute(
                 select(DocumentBlock)
                 .where(
-                    DocumentBlock.document_id == document_id,
-                    DocumentBlock.page_no == page_no,
+                    col(DocumentBlock.document_id) == document_id,
+                    col(DocumentBlock.page_no) == page_no,
                 )
-                .order_by(DocumentBlock.ord)
+                .order_by(col(DocumentBlock.ord))
             )
         ).scalars()
     )
@@ -266,7 +270,9 @@ async def document_chunks(
     chunks = list(
         (
             await session.execute(
-                select(Chunk).where(Chunk.document_id == document_id).order_by(Chunk.ordinal)
+                select(Chunk)
+                .where(col(Chunk.document_id) == document_id)
+                .order_by(col(Chunk.ordinal))
             )
         ).scalars()
     )
@@ -323,7 +329,7 @@ async def upload(
 
     sha = digest_bytes(data)
     existing = (
-        await session.execute(select(Document).where(Document.sha256 == sha))
+        await session.execute(select(Document).where(col(Document.sha256) == sha))
     ).scalar_one_or_none()
     document_id = prefixed_id("document")
 
@@ -449,7 +455,7 @@ async def delete_document(
 
     document.deleted_at = now()
     document.status = DocStatus.PENDING
-    await session.execute(Chunk.__table__.delete().where(Chunk.document_id == document_id))
+    await session.execute(delete(Chunk).where(col(Chunk.document_id) == document_id))
     await audit.log(
         AuditAction.DOC_DELETE,
         actor_user_id=principal.user_id,

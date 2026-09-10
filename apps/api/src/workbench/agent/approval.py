@@ -22,6 +22,8 @@ from datetime import timedelta
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlmodel import col
 
 from workbench.core.clock import now
 from workbench.core.hashing import digest
@@ -48,7 +50,12 @@ class ApprovalRequest:
 class ApprovalGate:
     """Creates and resolves approval requests."""
 
-    def __init__(self, session_factory: Any, *, expiry_hours: int = DEFAULT_EXPIRY_HOURS) -> None:
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        *,
+        expiry_hours: int = DEFAULT_EXPIRY_HOURS,
+    ) -> None:
         self.session_factory = session_factory
         self.expiry_hours = expiry_hours
 
@@ -61,7 +68,7 @@ class ApprovalGate:
         request: ApprovalRequest,
     ) -> Approval:
         """Record a pending decision and return it."""
-        async with self.session_factory() as session:  # type: AsyncSession
+        async with self.session_factory() as session:
             approval = Approval(
                 run_id=run_id,
                 step_id=step_id,
@@ -111,9 +118,9 @@ class ApprovalGate:
         """
         from workbench.core.errors import AuthorizationError, ConflictError, NotFoundError
 
-        async with self.session_factory() as session:  # type: AsyncSession
+        async with self.session_factory() as session:
             approval = (
-                await session.execute(select(Approval).where(Approval.id == approval_id))
+                await session.execute(select(Approval).where(col(Approval.id) == approval_id))
             ).scalar_one_or_none()
             if approval is None:
                 raise NotFoundError("No such approval request.")
@@ -157,9 +164,9 @@ class ApprovalGate:
             return approval
 
     async def status(self, approval_id: str) -> Approval | None:
-        async with self.session_factory() as session:  # type: AsyncSession
+        async with self.session_factory() as session:
             return (
-                await session.execute(select(Approval).where(Approval.id == approval_id))
+                await session.execute(select(Approval).where(col(Approval.id) == approval_id))
             ).scalar_one_or_none()
 
     async def expire_stale(self) -> int:
@@ -168,13 +175,13 @@ class ApprovalGate:
         Without this a run waits indefinitely on a decision that will never
         come. Expiry resolves it as a refusal, which is the safe direction.
         """
-        async with self.session_factory() as session:  # type: AsyncSession
+        async with self.session_factory() as session:
             stale = list(
                 (
                     await session.execute(
                         select(Approval).where(
-                            Approval.status == ApprovalStatus.PENDING,
-                            Approval.expires_at < now(),
+                            col(Approval.status) == ApprovalStatus.PENDING,
+                            col(Approval.expires_at) < now(),
                         )
                     )
                 ).scalars()

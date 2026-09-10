@@ -130,6 +130,13 @@ export function DocumentViewer() {
       <div className="flex min-h-0 flex-1 items-start justify-center overflow-auto bg-bg p-3">
         <div className="relative inline-block shadow-lg">
           {imageUrl ? (
+            // A plain <img>, not next/image. The page renders are served by
+            // this system's own API and the citation overlay is positioned
+            // against the element's natural box; next/image would route them
+            // through an optimizer this deployment has no reason to run, and
+            // on an air-gapped host that is a dependency with nothing behind
+            // it.
+            // eslint-disable-next-line @next/next/no-img-element
             <img
               ref={imageRef}
               src={imageUrl}

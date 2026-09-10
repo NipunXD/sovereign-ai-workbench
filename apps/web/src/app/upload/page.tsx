@@ -15,7 +15,6 @@ import { useCallback, useRef, useState } from "react";
 
 import { StagePipeline } from "@/components/upload/StagePipeline";
 import {
-  Button,
   Chip,
   ClassificationBadge,
   Panel,

@@ -16,8 +16,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from workbench.core.logging import get_logger
-from workbench.ingest.ir import (
+from workbench.core.ir import (
     BBox,
     Block,
     BlockSource,
@@ -27,6 +26,7 @@ from workbench.ingest.ir import (
     ExtractionReport,
     Page,
 )
+from workbench.core.logging import get_logger
 
 log = get_logger(__name__)
 

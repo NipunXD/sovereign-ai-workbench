@@ -5,7 +5,7 @@ import { Search as SearchIcon } from "lucide-react";
 import { useState } from "react";
 
 import { DocumentViewer } from "@/components/documents/DocumentViewer";
-import { Button, Chip, ClassificationBadge, EmptyState, Input, Spinner } from "@/components/ui/primitives";
+import { Button, Chip, EmptyState, Input, Spinner } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
 import { useSession } from "@/stores/session";
 import { useViewer } from "@/stores/viewer";

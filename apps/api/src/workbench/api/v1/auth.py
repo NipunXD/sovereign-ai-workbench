@@ -12,6 +12,7 @@ from datetime import timedelta
 from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlmodel import col
 
 from workbench.api.deps import Audit, CurrentPrincipal, DbSession
 from workbench.core.clock import now
@@ -80,9 +81,9 @@ async def _record_failed_attempt(
         attempts = (
             await session.execute(
                 update(User)
-                .where(User.id == user_id)
+                .where(col(User.id) == user_id)
                 .values(failed_attempts=User.failed_attempts + 1)
-                .returning(User.failed_attempts)
+                .returning(col(User.failed_attempts))
             )
         ).scalar_one()
 
@@ -90,7 +91,7 @@ async def _record_failed_attempt(
         if locked:
             await session.execute(
                 update(User)
-                .where(User.id == user_id)
+                .where(col(User.id) == user_id)
                 .values(locked_until=now() + timedelta(minutes=lockout_minutes))
             )
         await session.commit()
@@ -99,7 +100,7 @@ async def _record_failed_attempt(
 
 async def _load_user(session: DbSession, username: str) -> User | None:
     return (
-        await session.execute(select(User).where(User.username == username))
+        await session.execute(select(User).where(col(User.username) == username))
     ).scalar_one_or_none()
 
 
@@ -118,8 +119,8 @@ async def _roles_and_permissions(
         (
             await session.execute(
                 select(Role)
-                .join(UserRoleLink, UserRoleLink.role_id == Role.id)
-                .where(UserRoleLink.user_id == user.id)
+                .join(UserRoleLink, col(UserRoleLink.role_id) == Role.id)
+                .where(col(UserRoleLink.user_id) == user.id)
             )
         ).scalars()
     )
@@ -267,7 +268,7 @@ async def refresh_token(
 
     token_hash = hash_token(presented)
     stored = (
-        await session.execute(select(Session).where(Session.refresh_token_hash == token_hash))
+        await session.execute(select(Session).where(col(Session.refresh_token_hash) == token_hash))
     ).scalar_one_or_none()
 
     if stored is None:
@@ -291,7 +292,7 @@ async def refresh_token(
         raise AuthenticationError("This session has expired.")
 
     user = (
-        await session.execute(select(User).where(User.id == stored.user_id))
+        await session.execute(select(User).where(col(User.id) == stored.user_id))
     ).scalar_one_or_none()
     if user is None or not user.is_active:
         raise AuthenticationError("This account is no longer active.")
@@ -339,7 +340,7 @@ async def refresh_token(
 async def _revoke_chain(session: DbSession, compromised: Session) -> None:
     """Revoke every session related to a replayed token."""
     related = (
-        await session.execute(select(Session).where(Session.user_id == compromised.user_id))
+        await session.execute(select(Session).where(col(Session.user_id) == compromised.user_id))
     ).scalars()
     for item in related:
         if item.revoked_at is None:
@@ -354,7 +355,7 @@ async def logout(
     if presented:
         stored = (
             await session.execute(
-                select(Session).where(Session.refresh_token_hash == hash_token(presented))
+                select(Session).where(col(Session.refresh_token_hash) == hash_token(presented))
             )
         ).scalar_one_or_none()
         if stored and stored.revoked_at is None:
@@ -367,7 +368,7 @@ async def logout(
 @router.get("/me", response_model=MeResponse)
 async def me(principal: CurrentPrincipal, session: DbSession) -> MeResponse:
     user = (
-        await session.execute(select(User).where(User.id == principal.user_id))
+        await session.execute(select(User).where(col(User.id) == principal.user_id))
     ).scalar_one_or_none()
     return MeResponse(
         user_id=principal.user_id,

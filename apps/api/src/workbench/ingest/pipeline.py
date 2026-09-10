@@ -23,8 +23,8 @@ from pathlib import Path
 from typing import Any
 
 from workbench.core.errors import IngestionError, UnsupportedMediaTypeError
+from workbench.core.ir import Block, BlockSource, BlockType, DocumentIR
 from workbench.core.logging import get_logger
-from workbench.ingest.ir import Block, BlockSource, BlockType, DocumentIR
 from workbench.ingest.ocr.engine import OCREngine, OcrResult
 from workbench.ingest.ocr.quality import QualityThresholds, assess, page_needs_ocr
 from workbench.ingest.sniff import sniff

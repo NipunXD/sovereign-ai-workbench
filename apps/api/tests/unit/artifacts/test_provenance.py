@@ -8,7 +8,7 @@ standing between "the AI produced a number" and a reader being able to check it.
 from __future__ import annotations
 
 from workbench.artifacts.provenance import Provenance
-from workbench.ingest.ir import BBox
+from workbench.core.ir import BBox
 from workbench.rag.citations import Citation
 
 

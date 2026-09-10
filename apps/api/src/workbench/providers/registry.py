@@ -183,8 +183,8 @@ class ModelRegistry:
         if Lane.VISION.value in self._lanes:
             vision_candidates = self._lanes[Lane.VISION.value]
             for candidate in vision_candidates:
-                info = self._models.get(candidate)
-                if info and not info.supports(Capability.VISION):
+                vision_model = self._models.get(candidate)
+                if vision_model and not vision_model.supports(Capability.VISION):
                     # A text model in the vision lane would answer confidently
                     # about an image it never received. Refuse to start.
                     problems.append(
@@ -267,11 +267,13 @@ class ModelRegistry:
                 available.add(logical)
                 report[logical] = True
                 continue
-            served = by_provider.get(info.provider)
-            if served is None:
+            # Not `served`: that name holds the raw list from the provider
+            # in the loop above, and this is the normalised set built from it.
+            served_ids = by_provider.get(info.provider)
+            if served_ids is None:
                 report[logical] = False
                 continue
-            present = info.physical_id in served or f"{info.physical_id}:latest" in served
+            present = info.physical_id in served_ids or f"{info.physical_id}:latest" in served_ids
             report[logical] = present
             if present:
                 available.add(logical)

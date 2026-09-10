@@ -20,7 +20,9 @@ from sqlalchemy import text as sa_text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlmodel import Field, SQLModel
 
-from workbench.core.classification import Classification
+# Re-exported deliberately (see the module docstring); the redundant-looking
+# `as` is what marks it as a public name rather than an implementation import.
+from workbench.core.classification import Classification as Classification
 from workbench.core.clock import now
 from workbench.core.ids import prefixed_id
 from workbench.db.base import UTCDateTime

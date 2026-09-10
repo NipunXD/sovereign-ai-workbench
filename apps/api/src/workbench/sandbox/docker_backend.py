@@ -22,7 +22,7 @@ import json
 import tempfile
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from workbench.core.hashing import digest_bytes
 from workbench.core.logging import get_logger
@@ -264,7 +264,7 @@ class DockerSandbox:
             line = line.strip()
             if line.startswith("{") and line.endswith("}"):
                 try:
-                    return json.loads(line)
+                    return cast(dict[str, Any], json.loads(line))
                 except json.JSONDecodeError:
                     continue
         return {"status": "error", "error": "the harness produced no result", "stdout": raw_stdout}

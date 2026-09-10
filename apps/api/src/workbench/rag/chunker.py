@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from workbench.core.ids import prefixed_id
-from workbench.ingest.ir import Block, BlockType, DocumentIR
+from workbench.core.ir import Block, BlockType, DocumentIR
 
 #: Characters per token for English technical prose. Deliberately conservative:
 #: undercounting risks silent truncation at the embedding backend, which is a

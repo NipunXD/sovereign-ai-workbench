@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any
 
-from workbench.ingest.ir import BBox
+from workbench.core.citation import Citation as Citation
+from workbench.core.ir import BBox
 
 # Models are asked for `[[cite:ID]]` and reliably produce variations on it. All
 # of these appear in practice and all must resolve, because an unparsed marker
@@ -51,43 +51,6 @@ def _marker_ids(body: str) -> list[str]:
 #: short enough not to become a way of reading a whole restricted document
 #: through citations.
 SNIPPET_CHARS = 240
-
-
-@dataclass(frozen=True, slots=True)
-class Citation:
-    """One resolved reference, carrying everything the UI needs to show it."""
-
-    n: int
-    chunk_id: str
-    doc_id: str
-    doc_title: str
-    page_no: int
-    bbox: BBox = field(default_factory=BBox)
-    snippet: str = ""
-    section_path: list[str] = field(default_factory=list)
-    score: float = 0.0
-    retrieval_method: str = "hybrid"
-    #: Inherited from the source text's OCR confidence. Surfaced so a reader can
-    #: see when an answer rests on poorly-recognised text.
-    confidence: float = 1.0
-    doc_type: str = ""
-    parent_id: str | None = None
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "n": self.n,
-            "chunk_id": self.chunk_id,
-            "doc_id": self.doc_id,
-            "doc_title": self.doc_title,
-            "doc_type": self.doc_type,
-            "page_no": self.page_no,
-            "bbox": self.bbox.as_dict(),
-            "snippet": self.snippet,
-            "section_path": self.section_path,
-            "score": round(self.score, 4),
-            "retrieval_method": self.retrieval_method,
-            "confidence": round(self.confidence, 3),
-        }
 
 
 @dataclass(frozen=True, slots=True)

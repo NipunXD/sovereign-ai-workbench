@@ -16,8 +16,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from workbench.core.citation import Citation
 from workbench.core.clock import now
-from workbench.rag.citations import Citation
 
 #: Shown on every generated artifact. Deliberately plain: a hedge nobody reads
 #: is worse than a sentence that says what actually happened.

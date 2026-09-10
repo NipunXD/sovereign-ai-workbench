@@ -15,9 +15,10 @@ import time
 from typing import Any
 
 from sqlalchemy import text as sa_text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from workbench.core.ir import BBox
 from workbench.core.logging import get_logger
-from workbench.ingest.ir import BBox
 from workbench.rag.citations import EvidenceItem
 from workbench.rag.embedder import Embedder
 from workbench.rag.fusion import apply_confidence_penalty, reciprocal_rank_fusion
@@ -35,7 +36,8 @@ class HybridRetriever:
         *,
         embedder: Embedder,
         vector_store: VectorStore,
-        session_factory: Any = None,
+        #: Optional: without it, retrieval is dense-only. Guarded below.
+        session_factory: async_sessionmaker[AsyncSession] | None = None,
         dense_k: int = 40,
         sparse_k: int = 40,
         rrf_k: int = 60,
@@ -213,7 +215,7 @@ class HybridRetriever:
             """
         )
         try:
-            async with self.session_factory() as session:  # type: AsyncSession
+            async with self.session_factory() as session:
                 rows = (
                     (
                         await session.execute(

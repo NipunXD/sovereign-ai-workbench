@@ -8,7 +8,7 @@ they are.
 
 from __future__ import annotations
 
-from workbench.ingest.ir import BBox
+from workbench.core.ir import BBox
 from workbench.rag.citations import (
     EvidenceItem,
     build_evidence_prompt,

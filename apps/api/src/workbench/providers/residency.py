@@ -267,17 +267,17 @@ class ResidencyManager:
                     actually_resident.add(logical)
 
         for logical in list(self._entries):
-            info = self.registry.models.get(logical)
-            if info is None:
+            entry_info = self.registry.models.get(logical)
+            if entry_info is None:
                 continue
-            provider = self.registry.providers.get(info.provider)
-            if provider is None:
+            entry_provider = self.registry.providers.get(entry_info.provider)
+            if entry_provider is None:
                 continue
             # Only trust the reconciliation for backends that report residency.
             try:
-                reported = await provider.resident_models()
+                reported = await entry_provider.resident_models()
             except Exception as exc:
-                log.debug("residency_poll_failed", provider=info.provider, error=str(exc))
+                log.debug("residency_poll_failed", provider=entry_info.provider, error=str(exc))
                 continue
             if reported and logical not in actually_resident:
                 log.debug("residency_drift_corrected", model=logical)

@@ -36,7 +36,7 @@ from workbench.agent.state import (
     ValidationReport,
     merge_evidence,
 )
-from workbench.api.sse import EventName
+from workbench.core.event_names import EventName
 from workbench.core.ids import prefixed_id
 from workbench.core.logging import get_logger
 from workbench.providers.types import ChatMessage, GenerationRequest, ImageRef
@@ -636,13 +636,14 @@ class AgentRunner:
             return None
         try:
             from sqlalchemy import select
+            from sqlmodel import col
 
             from workbench.db.models import User
             from workbench.db.session import get_session_factory
 
             async with get_session_factory()() as session:
                 user = (
-                    await session.execute(select(User).where(User.id == user_id))
+                    await session.execute(select(User).where(col(User.id) == user_id))
                 ).scalar_one_or_none()
                 return (user.full_name or user.username) if user else user_id
         except Exception:

@@ -21,8 +21,8 @@ from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 
+from workbench.core.ir import BBox
 from workbench.core.logging import get_logger
-from workbench.ingest.ir import BBox
 
 log = get_logger(__name__)
 

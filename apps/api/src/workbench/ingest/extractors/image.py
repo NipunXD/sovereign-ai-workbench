@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from workbench.ingest.ir import DocumentIR, ExtractionReport, Page
+from workbench.core.ir import DocumentIR, ExtractionReport, Page
 
 
 class ImageExtractor:

@@ -18,6 +18,7 @@ from typing import Any
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col
 
 from workbench.core.clock import now
 from workbench.core.hashing import GENESIS_HASH, chain_hash
@@ -64,7 +65,7 @@ class AuditLogger:
 
     async def _previous_hash(self) -> str:
         result = await self.session.execute(
-            select(AuditEvent.hash).order_by(AuditEvent.seq.desc()).limit(1)
+            select(col(AuditEvent.hash)).order_by(col(AuditEvent.seq).desc()).limit(1)
         )
         return result.scalar_one_or_none() or GENESIS_HASH
 
@@ -197,7 +198,7 @@ async def verify_chain(
     row is invalid as a consequence — which is the property that makes the log
     evidence rather than merely a record.
     """
-    query = select(AuditEvent).where(AuditEvent.seq > start_seq).order_by(AuditEvent.seq)
+    query = select(AuditEvent).where(col(AuditEvent.seq) > start_seq).order_by(col(AuditEvent.seq))
     if limit:
         query = query.limit(limit)
 
@@ -209,9 +210,9 @@ async def verify_chain(
     if start_seq > 0:
         prior = (
             await session.execute(
-                select(AuditEvent.hash)
-                .where(AuditEvent.seq <= start_seq)
-                .order_by(AuditEvent.seq.desc())
+                select(col(AuditEvent.hash))
+                .where(col(AuditEvent.seq) <= start_seq)
+                .order_by(col(AuditEvent.seq).desc())
                 .limit(1)
             )
         ).scalar_one_or_none()

@@ -41,8 +41,8 @@ from typing import Any
 
 import numpy as np
 
+from workbench.core.ir import BBox, Block, BlockSource, BlockType
 from workbench.core.logging import get_logger
-from workbench.ingest.ir import BBox, Block, BlockSource, BlockType
 
 log = get_logger(__name__)
 
@@ -207,12 +207,15 @@ class VisionReader:
                     )
 
         # Cross-validation. A tag the model alone reports is not trusted.
-        for tag_name, tag in found.items():
+        # `tag` above is the tag *string* read out of the model's JSON; these
+        # are DrawingTag records. Same word, two types — named apart so the
+        # difference is visible rather than inferred from position.
+        for tag_name, record in found.items():
             normalised = tag_name.replace("-", "")
             if tag_name in ocr_tags or normalised in {t.replace("-", "") for t in ocr_tags}:
-                tag.confirmed_by.append("ocr")
+                record.confirmed_by.append("ocr")
             if tag_name in known_tags or normalised in {t.replace("-", "") for t in known_tags}:
-                tag.confirmed_by.append("registry")
+                record.confirmed_by.append("registry")
 
         confirmed = sum(1 for t in found.values() if t.confirmed)
         log.info(
@@ -225,29 +228,31 @@ class VisionReader:
         )
 
         blocks: list[Block] = []
-        for order, tag in enumerate(sorted(found.values(), key=lambda t: t.tag)):
-            connections = ", ".join(sorted(set(tag.connected_to)))
-            suffix = "" if tag.confirmed else "  [UNCONFIRMED — read by the vision model only]"
+        for order, record in enumerate(sorted(found.values(), key=lambda t: t.tag)):
+            connections = ", ".join(sorted(set(record.connected_to)))
+            suffix = "" if record.confirmed else "  [UNCONFIRMED — read by the vision model only]"
             blocks.append(
                 Block(
                     block_id=f"p{page_no}tag{order}",
                     page_no=page_no,
                     type=BlockType.DRAWING_ANNOTATION,
                     text=(
-                        f"{tag.tag} — {tag.equipment_type}"
+                        f"{record.tag} — {record.equipment_type}"
                         + (f", connected to {connections}" if connections else "")
-                        + (f". {tag.note}" if tag.note else "")
+                        + (f". {record.note}" if record.note else "")
                         + suffix
                     ),
-                    confidence=VLM_CONFIDENCE_CAP if tag.confirmed else UNCONFIRMED_TAG_CONFIDENCE,
+                    confidence=VLM_CONFIDENCE_CAP
+                    if record.confirmed
+                    else UNCONFIRMED_TAG_CONFIDENCE,
                     source=BlockSource.VLM,
                     order=order,
                     attrs={
-                        "tag": tag.tag,
-                        "equipment_type": tag.equipment_type,
-                        "connected_to": sorted(set(tag.connected_to)),
-                        "confirmed_by": tag.confirmed_by,
-                        "confirmed": tag.confirmed,
+                        "tag": record.tag,
+                        "equipment_type": record.equipment_type,
+                        "connected_to": sorted(set(record.connected_to)),
+                        "confirmed_by": record.confirmed_by,
+                        "confirmed": record.confirmed,
                     },
                 )
             )
@@ -285,7 +290,7 @@ class VisionReader:
                     json_schema=json_schema,
                 )
             )
-            return result.text
+            return str(result.text)
         except Exception as exc:
             log.warning("vision_read_failed", error=str(exc))
             return ""

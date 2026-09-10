@@ -147,10 +147,10 @@ class ModelRouter:
         self._stage2 = self._config.get("stage2", {})
         selection = self._config.get("selection", {})
 
-        profile = registry.profile(self.profile_name)
+        profile_config = registry.profile(self.profile_name)
         breaker_cfg = selection.get("circuit_breaker", {})
         self.policy = SelectionPolicy(
-            prefer=str(profile.get("prefer", "loaded_then_quality")),
+            prefer=str(profile_config.get("prefer", "loaded_then_quality")),
             residency_bonus_per_second=float(
                 selection.get("residency_bonus_per_second_saved", 0.15)
             ),
@@ -461,7 +461,7 @@ class ModelRouter:
             if not latencies:
                 return 0.0
             index = min(len(latencies) - 1, int(len(latencies) * fraction))
-            return round(latencies[index], 3)
+            return float(round(latencies[index], 3))
 
         return {
             "decisions": self.stats["decisions"],

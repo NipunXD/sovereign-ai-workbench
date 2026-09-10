@@ -188,6 +188,7 @@ async def _persist_artifact(
     approval queue and undownloadable.
     """
     from sqlalchemy import select
+    from sqlmodel import col
 
     from workbench.db.models import Artifact, ArtifactStatus
     from workbench.db.session import session_scope
@@ -199,7 +200,7 @@ async def _persist_artifact(
     try:
         async with session_scope() as session:
             existing = (
-                await session.execute(select(Artifact).where(Artifact.sha256 == sha256))
+                await session.execute(select(Artifact).where(col(Artifact.sha256) == sha256))
             ).scalar_one_or_none()
             if existing is not None:
                 return

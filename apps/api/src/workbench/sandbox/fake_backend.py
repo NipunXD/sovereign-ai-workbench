@@ -16,6 +16,7 @@ from pathlib import Path
 
 from workbench.sandbox.base import (
     OutputFile,
+    SandboxBackend,
     SandboxJob,
     SandboxResult,
     SandboxStatus,
@@ -74,7 +75,9 @@ class FakeSandbox:
         )
 
 
-def build_backend(name: str, *, workspace_root: Path, image: str = "workbench/sandbox:0.1.0"):
+def build_backend(
+    name: str, *, workspace_root: Path, image: str = "workbench/sandbox:0.1.0"
+) -> SandboxBackend:
     """Select a sandbox backend by name."""
     if name == "docker":
         from workbench.sandbox.docker_backend import DockerSandbox

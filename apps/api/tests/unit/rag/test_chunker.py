@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from workbench.ingest.ir import BBox, Block, BlockSource, BlockType, DocumentIR, Page
+from workbench.core.ir import BBox, Block, BlockSource, BlockType, DocumentIR, Page
 from workbench.rag.chunker import Chunker, ChunkSpec, estimate_tokens
 
 

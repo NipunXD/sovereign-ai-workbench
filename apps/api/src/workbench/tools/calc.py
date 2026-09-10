@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field, field_validator
 from workbench.tools.base import BaseTool, ToolContext, ToolResult, ToolSpec
 
 #: One registry for the process; constructing one is expensive.
-_units = pint.UnitRegistry()
+_units: Any = pint.UnitRegistry()
 
 Calculation = Literal[
     "corrosion_rate",
@@ -239,7 +239,9 @@ class EngineeringCalcTool(BaseTool):
             )
 
         try:
-            quantities = {key: _units.Quantity(value) for key, value in cleaned.items()}
+            quantities: dict[str, Any] = {
+                key: _units.Quantity(value) for key, value in cleaned.items()
+            }
         except (pint.UndefinedUnitError, pint.DimensionalityError, TypeError, ValueError) as exc:
             return ToolResult.failure(f"could not parse the inputs: {exc}")
 

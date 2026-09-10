@@ -9,7 +9,7 @@ through a tool.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -48,7 +48,8 @@ def get_events(request: Request) -> Any:
 
 
 def get_tokens(request: Request) -> TokenService:
-    return request.app.state.tokens
+    # Starlette's app.state is untyped by design; the lifespan sets this.
+    return cast(TokenService, request.app.state.tokens)
 
 
 async def get_audit(
