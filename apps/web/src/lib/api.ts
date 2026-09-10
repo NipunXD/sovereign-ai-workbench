@@ -8,6 +8,8 @@
  */
 
 import type {
+  Approval,
+  Artifact,
   AuditPage,
   AuditSummary,
   ChainReport,
@@ -213,6 +215,22 @@ export const api = {
 
   auditExportUrl: () => `${BASE}/audit/export`,
 
+  // --- approvals and artifacts ----------------------------------------------
+
+  approvals: (status = "pending") =>
+    request<Approval[]>(`/approvals?status=${status}`),
+
+  decideApproval: (id: string, approved: boolean, comment = "") =>
+    request<Approval>(`/approvals/${id}/decide`, {
+      method: "POST",
+      body: JSON.stringify({ approved, comment }),
+    }),
+
+  artifacts: (status?: string) =>
+    request<Artifact[]>(`/artifacts${status ? `?status=${status}` : ""}`),
+
+  artifactDownloadUrl: (sha256: string) => `${BASE}/artifacts/${sha256}/download`,
+
   // --- system ---------------------------------------------------------------
 
   models: () => request<ModelsResponse>("/models"),
@@ -228,6 +246,22 @@ export const api = {
       decide_p95_ms: number;
     }>("/models/routing-stats"),
 };
+
+/** Download a generated artifact. The endpoint is authenticated, so an
+ *  <a download> cannot fetch it — the blob is retrieved and saved here. */
+export async function downloadArtifact(sha256: string, filename: string): Promise<void> {
+  const response = await fetch(api.artifactDownloadUrl(sha256), {
+    credentials: "include",
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+  });
+  if (!response.ok) throw await parseError(response);
+  const url = URL.createObjectURL(await response.blob());
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
 
 /**
  * The page image is served by an authenticated endpoint, so an <img src> cannot

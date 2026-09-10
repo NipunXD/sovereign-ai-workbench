@@ -9,6 +9,7 @@ import {
   MessageSquare,
   ScrollText,
   Search,
+  ShieldCheck,
   Settings2,
   UploadCloud,
 } from "lucide-react";
@@ -26,6 +27,7 @@ const NAV = [
   { href: "/documents", label: "Documents", icon: FileText, permission: "doc:read" },
   { href: "/upload", label: "Ingest", icon: UploadCloud, permission: "doc:ingest" },
   { href: "/search", label: "Retrieval", icon: Search, permission: "doc:read" },
+  { href: "/approvals", label: "Approvals", icon: ShieldCheck, permission: null },
   { href: "/audit", label: "Audit log", icon: ScrollText, permission: "audit:read" },
   { href: "/admin", label: "System", icon: Settings2, permission: null },
 ];

@@ -309,3 +309,60 @@ export interface IngestComplete {
   ocr_pages: number;
   vlm_pages: number;
 }
+
+
+// --- approvals and artifacts -------------------------------------------------
+
+export interface Approval {
+  id: string;
+  run_id: string | null;
+  kind: "tool" | "artifact" | "final";
+  subject_type: string;
+  subject_id: string;
+  requested_by: string | null;
+  requested_by_name: string | null;
+  requested_at: string;
+  payload_summary: Record<string, unknown>;
+  status: "pending" | "approved" | "rejected" | "expired";
+  decided_by: string | null;
+  decided_at: string | null;
+  comment: string | null;
+  expires_at: string | null;
+  /** True when the viewer raised this request and therefore may not decide it. */
+  is_own_request: boolean;
+}
+
+export interface ArtifactSource {
+  title: string;
+  doc_type: string;
+  pages: number[];
+  lowest_confidence: number;
+}
+
+export interface ArtifactProvenance {
+  run_id?: string;
+  generated_by?: string;
+  generated_at?: string;
+  models?: Record<string, string>;
+  tools_used?: string[];
+  approved_by?: string | null;
+  approved_at?: string | null;
+  sha256?: string;
+  sources?: ArtifactSource[];
+  has_uncertain_sources?: boolean;
+}
+
+export interface Artifact {
+  id: string;
+  run_id: string | null;
+  kind: string;
+  filename: string;
+  mime: string;
+  sha256: string;
+  size_bytes: number;
+  status: "draft" | "pending_approval" | "approved" | "rejected" | "superseded";
+  version: number;
+  created_by: string | null;
+  created_at: string;
+  provenance: ArtifactProvenance;
+}
