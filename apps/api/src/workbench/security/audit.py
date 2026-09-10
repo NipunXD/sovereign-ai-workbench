@@ -158,17 +158,20 @@ class AuditLogger:
             )
         return event
 
-    async def deny(self, action: str, *, reason: str, **kwargs: Any) -> AuditEvent | None:
-        """Record a refused action, durably.
+    async def log_durable(self, action: str, **kwargs: Any) -> AuditEvent | None:
+        """Record an event on a connection of its own, committed immediately.
 
-        Written on its own connection and committed immediately, because the
-        caller is about to raise and roll the request transaction back. A failed
-        login that leaves no trace is worse than no audit log at all — it looks
-        like nothing happened.
+        For the events whose whole value is that they survive the failure of
+        the request that produced them. Two kinds qualify:
+
+        * a refusal, where the caller is about to raise and roll the request
+          transaction back — a failed login that leaves no trace looks exactly
+          like nothing happened;
+        * the closing record of a run, written from a `finally` that may be
+          executing inside a cancelled task whose session is already being torn
+          down. Writing through that session raised inside the teardown and
+          lost the record, leaving runs with a start and no end.
         """
-        kwargs.pop("decision", None)
-        severity = kwargs.pop("severity", Severity.WARNING)
-
         from workbench.db.session import get_session_factory
 
         try:
@@ -176,17 +179,20 @@ class AuditLogger:
         except RuntimeError:
             # No engine (tests, or a database that failed to initialise). Fall
             # back to the request session so the record is at least attempted.
-            return await self.log(
-                action, decision=AuditDecision.DENY, reason=reason, severity=severity, **kwargs
-            )
+            return await self.log(action, **kwargs)
 
         async with factory() as independent:
-            logger = AuditLogger(independent)
-            event = await logger.log(
-                action, decision=AuditDecision.DENY, reason=reason, severity=severity, **kwargs
-            )
+            event = await AuditLogger(independent).log(action, **kwargs)
             await independent.commit()
             return event
+
+    async def deny(self, action: str, *, reason: str, **kwargs: Any) -> AuditEvent | None:
+        """Record a refused action, durably."""
+        kwargs.pop("decision", None)
+        severity = kwargs.pop("severity", Severity.WARNING)
+        return await self.log_durable(
+            action, decision=AuditDecision.DENY, reason=reason, severity=severity, **kwargs
+        )
 
 
 async def verify_chain(

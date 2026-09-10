@@ -13,7 +13,12 @@ export interface ChatMessage {
   reasoning: string;
   validation: ValidationReport | null;
   summary: RunSummary | null;
-  status: "streaming" | "done" | "error" | "cancelled";
+  /** "interrupted" means the stream ended without the run saying it had
+   *  finished — the tab was closed, the connection dropped, or the server went
+   *  away mid-run. Distinct from "done" on purpose: the text on screen is
+   *  whatever arrived before the cut, and presenting a half-finished answer as
+   *  a complete one is how a reader ends up trusting a truncated figure. */
+  status: "streaming" | "done" | "error" | "cancelled" | "interrupted";
   error?: string;
   startedAt: number;
 }

@@ -123,7 +123,19 @@ export default function ChatPage() {
                         ) : null}
 
                         {message.error ? (
-                          <p className="mt-2 rounded border border-danger/40 bg-danger/10 px-2 py-1.5 text-xs text-danger">
+                          // An interrupted run is amber, not red: nothing
+                          // failed, the answer is simply incomplete. Colouring
+                          // it the same as a failure would teach people to
+                          // ignore both.
+                          <p
+                            className={cn(
+                              "mt-2 rounded border px-2 py-1.5 text-xs",
+                              message.status === "interrupted"
+                                ? "border-warn/40 bg-warn/10 text-warn"
+                                : "border-danger/40 bg-danger/10 text-danger",
+                            )}
+                          >
+                            {message.status === "interrupted" ? "Incomplete — " : null}
                             {message.error}
                           </p>
                         ) : null}

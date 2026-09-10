@@ -7,6 +7,14 @@ import { streamRequest } from "@/lib/sse";
 import type { Citation, PlanStep, RouteDecision, RunSummary, ValidationReport } from "@/lib/types";
 import { useRun } from "@/stores/run";
 
+/** How long silence has to last before the stream is treated as dead.
+ *
+ *  The server heartbeats every 15s, so this is six missed beats. Generous on
+ *  purpose: a local model can take a couple of minutes on one step, and
+ *  aborting a run that is merely slow would be worse than waiting. */
+const STALL_AFTER_MS = 90_000;
+const STALL_CHECK_MS = 5_000;
+
 /**
  * Drives one agent run and reduces its trace into the run store.
  *
@@ -81,6 +89,21 @@ export function useAgentStream() {
 
       controller.current = new AbortController();
 
+      // Whether the run told us it ended. Without this the `finally` below
+      // marked every stream that stopped as "done", so a run cut off halfway
+      // was presented as one that had completed.
+      let finished = false;
+      let lastEventAt = Date.now();
+
+      // The server sends an SSE heartbeat every 15s precisely so silence is
+      // detectable. If even those stop, the run is not slow — the connection
+      // is gone — and saying so beats a spinner that never resolves.
+      const watchdog = window.setInterval(() => {
+        if (Date.now() - lastEventAt < STALL_AFTER_MS) return;
+        window.clearInterval(watchdog);
+        controller.current?.abort();
+      }, STALL_CHECK_MS);
+
       try {
         for await (const event of streamRequest("/api/v1/chat/stream", {
           body: { message },
@@ -88,6 +111,7 @@ export function useAgentStream() {
           signal: controller.current.signal,
         })) {
           const at = Date.now();
+          lastEventAt = at;
           let payload: Record<string, unknown>;
           try {
             payload = JSON.parse(event.data);
@@ -192,6 +216,7 @@ export function useAgentStream() {
               break;
 
             case "run_finished":
+              finished = true;
               flush();
               run.patchLast({
                 summary: payload as unknown as RunSummary,
@@ -208,12 +233,23 @@ export function useAgentStream() {
           });
         }
       } finally {
+        window.clearInterval(watchdog);
         flush();
         const done = useRun.getState();
         done.setRunning(false);
         done.setThinking(false);
         if (done.messages.at(-1)?.status === "streaming") {
-          done.patchLast({ status: "done" });
+          done.patchLast(
+            finished
+              ? { status: "done" }
+              : {
+                  status: "interrupted",
+                  error:
+                    "The connection ended before this run finished. Anything above " +
+                    "arrived before the cut and may be incomplete — the run itself " +
+                    "may also have stopped on the server.",
+                },
+          );
         }
         controller.current = null;
       }

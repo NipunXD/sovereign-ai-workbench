@@ -211,6 +211,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.indexer = None
         log.warning("retrieval_unavailable", error=str(exc))
 
+    # A run only ends when its own request ends, so a process that exits mid-run
+    # leaves rows marked running with nothing left alive to close them. Anything
+    # still running from a previous process is, by definition, not.
+    from workbench.api.v1.runs import reap_orphans
+
+    await reap_orphans()
+
     log.info(
         "workbench_started",
         version=__version__,

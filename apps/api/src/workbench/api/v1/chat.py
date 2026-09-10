@@ -13,6 +13,7 @@ responsiveness and swaps in the resolved version at the end.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from typing import Annotated, Any
 
@@ -24,9 +25,11 @@ from workbench.agent.runner import AgentRunner
 from workbench.agent.state import Budget
 from workbench.api.deps import CurrentPrincipal, DbSession, require_permission
 from workbench.api.sse import SSE_HEADERS, EventName, format_sse
+from workbench.api.v1.runs import close_run, open_run
 from workbench.core.ids import prefixed_id
 from workbench.core.logging import get_logger
-from workbench.db.models import AuditAction
+from workbench.db.models import AuditAction, RunStatus
+from workbench.db.session import session_scope
 from workbench.security.audit import AuditLogger
 from workbench.security.rbac import Principal
 
@@ -61,6 +64,63 @@ def build_runner(request: Request) -> AgentRunner:
     )
 
 
+#: Strong references to in-flight finalisation tasks. asyncio holds only weak
+#: ones, so without this a cleanup task can be collected before it runs.
+_FINALISERS: set[asyncio.Task[None]] = set()
+
+
+def _finalise_in_background(
+    *,
+    run_id: str,
+    conversation_id: str,
+    status: str,
+    plan: dict[str, Any],
+    budget: dict[str, Any],
+    validation: dict[str, Any],
+    failure: dict[str, Any] | None,
+    citations: int,
+    principal: Principal,
+) -> None:
+    """Close out a run on a task of its own.
+
+    Called from the stream's `finally`, which may be executing inside a
+    cancelled task. Everything here therefore runs detached and on its own
+    database session: the record of how a run ended must not depend on the
+    request that ended.
+    """
+
+    async def finalise() -> None:
+        await close_run(
+            run_id=run_id,
+            status=status,
+            plan=plan,
+            budget=budget,
+            validation=validation,
+            error=failure,
+        )
+        try:
+            async with session_scope() as session:
+                await AuditLogger(session).log(
+                    AuditAction.RUN_FINISH,
+                    actor_user_id=principal.user_id,
+                    actor_username=principal.username,
+                    run_id=run_id,
+                    conversation_id=conversation_id,
+                    resource_type="run",
+                    resource_id=run_id,
+                    output_digest=None,
+                    metadata={"status": status, "citations": citations},
+                )
+        except Exception as exc:
+            # Failing to write the closing audit record must not take anything
+            # else down; the run row above already records the outcome.
+            log.error("run_finish_audit_failed", run_id=run_id, error=str(exc))
+
+    task = asyncio.ensure_future(finalise())
+    _FINALISERS.add(task)
+    task.add_done_callback(_FINALISERS.discard)
+
+
 @router.post("/chat/stream")
 async def chat_stream(
     payload: ChatRequest,
@@ -87,10 +147,21 @@ async def chat_stream(
     )
     await session.commit()
 
+    await open_run(
+        run_id=run_id,
+        conversation_id=conversation_id,
+        principal=principal,
+        message=payload.message,
+    )
+
     async def stream() -> AsyncIterator[str]:
         seq = 0
         citations: list[dict[str, Any]] = []
-        status = "succeeded"
+        status = RunStatus.SUCCEEDED
+        plan: dict[str, Any] = {}
+        budget_used: dict[str, Any] = {}
+        validation: dict[str, Any] = {}
+        failure: dict[str, Any] | None = None
         # The gate decides before the tool runs, so an artifact produced after
         # an approval in this run is already approved — it should not sit in
         # the queue a second time asking about the same decision.
@@ -121,12 +192,30 @@ async def chat_stream(
                         principal=principal,
                         approved=approved_in_run,
                     )
+                elif event.name == EventName.PLAN_CREATED:
+                    plan = event.data
+                elif event.name == EventName.VALIDATION:
+                    validation = event.data
                 elif event.name == EventName.RUN_FINISHED:
-                    status = event.data.get("status", "succeeded")
+                    status = event.data.get("status", RunStatus.SUCCEEDED)
+                    budget_used = event.data.get("budget") or {}
                 yield format_sse(event.name, event.data, seq=seq)
+        except asyncio.CancelledError:
+            # The client went away — a closed tab, a navigation, a reload. This
+            # is not caught by `except Exception`: CancelledError is a
+            # BaseException, so it used to pass straight through to `finally`
+            # while the request's own session was already being torn down, and
+            # the closing record was lost with it. That is how a run ended up
+            # with a start and no end, and a browser left spinning on a run
+            # that had stopped.
+            log.info("chat_stream_cancelled", run_id=run_id)
+            status = RunStatus.CANCELLED
+            failure = {"reason": "the client disconnected before the run finished"}
+            raise
         except Exception as exc:
             log.exception("chat_stream_failed", run_id=run_id, error=str(exc))
-            status = "failed"
+            status = RunStatus.FAILED
+            failure = {"code": type(exc).__name__, "message": str(exc)[:500]}
             seq += 1
             yield format_sse(
                 EventName.ERROR,
@@ -134,23 +223,28 @@ async def chat_stream(
                 seq=seq,
             )
         finally:
-            try:
-                await audit.log(
-                    AuditAction.RUN_FINISH,
-                    actor_user_id=principal.user_id,
-                    actor_username=principal.username,
-                    run_id=run_id,
-                    conversation_id=conversation_id,
-                    resource_type="run",
-                    resource_id=run_id,
-                    output_digest=None,
-                    metadata={"status": status, "citations": len(citations)},
-                )
-                await session.commit()
-            except Exception as exc:
-                # Failing to write the closing audit record must not corrupt the
-                # response the user already received.
-                log.error("run_finish_audit_failed", run_id=run_id, error=str(exc))
+            # Detached on purpose. When the client disconnects this generator is
+            # cancelled, and in a cancelled task *every* await raises
+            # CancelledError at its first suspension point — so awaiting the
+            # closing writes here runs none of them. The symptom is precise and
+            # confusing: the cancellation is logged, and the run stays marked
+            # `running` forever with nothing to say why.
+            #
+            # Handing the work to an independent task detaches it from this
+            # one's cancellation. The reference is held until it finishes
+            # because the loop only keeps weak references to tasks, and a
+            # garbage-collected cleanup task is the same bug with extra steps.
+            _finalise_in_background(
+                run_id=run_id,
+                conversation_id=conversation_id,
+                status=status,
+                plan=plan,
+                budget=budget_used,
+                validation=validation,
+                failure=failure,
+                citations=len(citations),
+                principal=principal,
+            )
 
     return StreamingResponse(stream(), media_type="text/event-stream", headers=SSE_HEADERS)
 
