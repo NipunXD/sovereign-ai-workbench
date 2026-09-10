@@ -115,3 +115,48 @@ def test_bbox_survives_into_the_citation() -> None:
     citation = item("a", bbox=box, page_from=3).to_citation(1)
     assert citation.as_dict()["bbox"] == box.as_dict()
     assert citation.as_dict()["page_no"] == 3
+
+
+# --- marker forms models actually emit ---------------------------------------
+def test_several_ids_in_one_marker() -> None:
+    """`[[cite:a,b]]` is common and must yield two references, not one bad id."""
+    result = resolve_markers("Both sources agree [[cite:a,b]].", [item("a"), item("b")])
+    assert result.text == "Both sources agree [1][2]."
+    assert not result.unresolved
+
+
+def test_markers_run_together_without_separators() -> None:
+    """`[[cite:a][cite:b]]` — seen constantly, and it used to resolve to nothing.
+
+    Left unparsed this is doubly wrong: the raw marker shows in the answer, and
+    the sentence counts as ungrounded, so a correct answer scores as a
+    hallucination.
+    """
+    result = resolve_markers("Rate is 0.55 mm/yr [[cite:a][cite:b]].", [item("a"), item("b")])
+    assert result.text == "Rate is 0.55 mm/yr [1][2]."
+    assert not result.unresolved
+
+
+def test_adjacent_markers() -> None:
+    result = resolve_markers("Two [[cite:a]][[cite:b]].", [item("a"), item("b")])
+    assert result.text == "Two [1][2]."
+
+
+def test_multi_id_marker_reports_only_the_invented_id() -> None:
+    result = resolve_markers("Mixed [[cite:a][cite:ghost]].", [item("a")])
+    assert result.text == "Mixed [1]."
+    assert result.unresolved == ["ghost"]
+
+
+def test_no_raw_marker_survives_resolution() -> None:
+    """Whatever the model emits, the reader must never see the raw syntax."""
+    evidence = [item("a"), item("b")]
+    for text in (
+        "x [[cite:a]] y",
+        "x [[cite: a ]] y",
+        "x [[cite:a,b]] y",
+        "x [[cite:a][cite:b]] y",
+        "x [[cite:a]][[cite:b]] y",
+        "x [[cite:unknown]] y",
+    ):
+        assert "[[" not in resolve_markers(text, evidence).text, text

@@ -34,6 +34,115 @@ Calculation = Literal[
 ]
 
 
+#: Expected inputs per calculation, and the aliases models reach for instead.
+#:
+#: A free-form dict gives a model nothing to aim at, so it invents plausible
+#: names — "final_thickness" for "current_thickness", "time_difference" for
+#: "interval". Rejecting those would be technically correct and practically
+#: useless, so known aliases are accepted and anything genuinely unrecognised
+#: produces an error naming the parameters that were expected.
+PARAMETERS: dict[str, dict[str, Any]] = {
+    "corrosion_rate": {
+        "required": ["initial_thickness", "current_thickness", "interval"],
+        "aliases": {
+            "final_thickness": "current_thickness",
+            "later_thickness": "current_thickness",
+            "previous_thickness": "initial_thickness",
+            "earlier_thickness": "initial_thickness",
+            "original_thickness": "initial_thickness",
+            "time_difference": "interval",
+            "elapsed_time": "interval",
+            "period": "interval",
+            "years": "interval",
+        },
+    },
+    "remaining_life": {
+        "required": ["current_thickness", "minimum_thickness", "corrosion_rate"],
+        "aliases": {
+            "t_min": "minimum_thickness",
+            "minimum_required_thickness": "minimum_thickness",
+            "retirement_thickness": "minimum_thickness",
+            "actual_thickness": "current_thickness",
+            "rate": "corrosion_rate",
+        },
+    },
+    "minimum_thickness_shell": {
+        "required": ["design_pressure", "inside_radius", "allowable_stress"],
+        "optional": ["joint_efficiency"],
+        "aliases": {
+            "pressure": "design_pressure",
+            "radius": "inside_radius",
+            "stress": "allowable_stress",
+            "efficiency": "joint_efficiency",
+            "weld_efficiency": "joint_efficiency",
+        },
+    },
+    "mawp_shell": {
+        "required": ["thickness", "inside_radius", "allowable_stress"],
+        "optional": ["joint_efficiency"],
+        "aliases": {
+            "actual_thickness": "thickness",
+            "radius": "inside_radius",
+            "stress": "allowable_stress",
+            "efficiency": "joint_efficiency",
+        },
+    },
+    "lmtd": {
+        "required": ["delta_t1", "delta_t2"],
+        "aliases": {"dt1": "delta_t1", "dt2": "delta_t2",
+                    "hot_end_approach": "delta_t1", "cold_end_approach": "delta_t2"},
+    },
+    "heat_duty": {
+        "required": ["mass_flow", "specific_heat", "delta_t"],
+        "aliases": {"flow": "mass_flow", "flow_rate": "mass_flow",
+                    "cp": "specific_heat", "temperature_rise": "delta_t", "dt": "delta_t"},
+    },
+    "orifice_flow": {
+        "required": ["beta", "orifice_diameter", "differential_pressure", "density"],
+        "optional": ["discharge_coefficient"],
+        "aliases": {"beta_ratio": "beta", "diameter": "orifice_diameter",
+                    "dp": "differential_pressure", "delta_p": "differential_pressure",
+                    "fluid_density": "density", "cd": "discharge_coefficient"},
+    },
+}
+
+
+def normalise_inputs(calculation: str, raw: dict[str, str]) -> tuple[dict[str, str], list[str]]:
+    """Map aliases onto canonical names and drop anything unrecognised.
+
+    Returns the cleaned inputs and the names that were discarded, so the caller
+    can say what it ignored rather than failing on a stray key.
+    """
+    spec = PARAMETERS.get(calculation, {})
+    known = set(spec.get("required", [])) | set(spec.get("optional", []))
+    aliases: dict[str, str] = spec.get("aliases", {})
+
+    cleaned: dict[str, str] = {}
+    ignored: list[str] = []
+    for key, value in raw.items():
+        canonical = key if key in known else aliases.get(key.lower().strip())
+        if canonical is None:
+            ignored.append(key)
+            continue
+        cleaned.setdefault(canonical, value)
+    return cleaned, ignored
+
+
+def describe_parameters() -> str:
+    """Render the expected inputs into the tool description.
+
+    Without this the binder is guessing at key names, which is exactly how the
+    wrong ones get invented.
+    """
+    lines = []
+    for name, spec in PARAMETERS.items():
+        required = ", ".join(spec.get("required", []))
+        optional = spec.get("optional") or []
+        suffix = f" (optional: {', '.join(optional)})" if optional else ""
+        lines.append(f"{name}: {required}{suffix}")
+    return "; ".join(lines)
+
+
 class CalcInput(BaseModel):
     """Inputs for one calculation.
 
@@ -84,9 +193,9 @@ class EngineeringCalcTool(BaseTool):
         name="calc.engineering",
         description=(
             "Perform a standard refinery engineering calculation with dimensional "
-            "checking. Supported: corrosion_rate, remaining_life, "
-            "minimum_thickness_shell, mawp_shell, orifice_flow, lmtd, heat_duty. "
-            "Supply every quantity with its unit, e.g. '9.2 mm', '6 year', '15 barg'."
+            "checking. Every quantity must carry its unit, e.g. '9.2 mm', '6 year', "
+            "'15 bar'. Required inputs per calculation — "
+            + describe_parameters()
         ),
         input_model=CalcInput,
         output_model=CalcOutput,
@@ -102,8 +211,19 @@ class EngineeringCalcTool(BaseTool):
         if handler is None:
             return ToolResult.failure(f"unsupported calculation '{args.calculation}'")
 
+        cleaned, ignored = normalise_inputs(args.calculation, args.inputs)
+        expected = PARAMETERS.get(args.calculation, {})
+        missing = [name for name in expected.get("required", []) if name not in cleaned]
+        if missing:
+            return ToolResult.failure(
+                f"missing required input(s) for {args.calculation}: {', '.join(missing)}. "
+                f"Expected: {', '.join(expected.get('required', []))}"
+                + (f" (optional: {', '.join(expected.get('optional', []))})"
+                   if expected.get("optional") else "")
+            )
+
         try:
-            quantities = {key: _units.Quantity(value) for key, value in args.inputs.items()}
+            quantities = {key: _units.Quantity(value) for key, value in cleaned.items()}
         except (pint.UndefinedUnitError, pint.DimensionalityError, TypeError, ValueError) as exc:
             return ToolResult.failure(f"could not parse the inputs: {exc}")
 
@@ -120,7 +240,13 @@ class EngineeringCalcTool(BaseTool):
         except Exception as exc:  # noqa: BLE001
             return ToolResult.failure(f"{type(exc).__name__}: {exc}")
 
-        return ToolResult(ok=True, data=output, metrics={"calculation": args.calculation})
+        if ignored:
+            output.assumptions.append(f"Ignored unrecognised input(s): {', '.join(ignored)}.")
+        return ToolResult(
+            ok=True,
+            data=output,
+            metrics={"calculation": args.calculation, "ignored_inputs": ignored},
+        )
 
     # ------------------------------------------------------------ mechanical
     @staticmethod

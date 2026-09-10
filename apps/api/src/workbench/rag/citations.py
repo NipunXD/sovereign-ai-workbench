@@ -18,9 +18,33 @@ from typing import Any
 
 from workbench.ingest.ir import BBox
 
-#: What the model is instructed to emit. Tolerant of whitespace because models
-#: are inconsistent about it.
-CITE_PATTERN = re.compile(r"\[\[\s*cite\s*:\s*([A-Za-z0-9_\-]+)\s*\]\]")
+# Models are asked for `[[cite:ID]]` and reliably produce variations on it. All
+# of these appear in practice and all must resolve, because an unparsed marker
+# is both an ugly artefact in the answer and a false hallucination signal:
+#
+#   [[cite:a]]              the documented form
+#   [[cite: a ]]            stray whitespace
+#   [[cite:a,b]]            several ids in one marker
+#   [[cite:a][cite:b]]      markers run together without separators
+#   [[cite:a]][[cite:b]]    adjacent markers
+#
+#: Matches one marker, capturing everything between the outer brackets.
+CITE_PATTERN = re.compile(r"\[\[\s*cite\s*:\s*(.+?)\s*\]\]", re.DOTALL)
+
+#: Splits a marker body into ids, tolerating the run-together form.
+_ID_SPLIT = re.compile(r"[,;\s]+|\]\s*\[\s*cite\s*:\s*", re.IGNORECASE)
+
+
+def _marker_ids(body: str) -> list[str]:
+    """Extract every chunk id from one marker body, in order."""
+    ids = []
+    for token in _ID_SPLIT.split(body):
+        token = token.strip().strip("[]")
+        if token.lower().startswith("cite:"):
+            token = token[5:].strip()
+        if token:
+            ids.append(token)
+    return ids
 
 #: Snippet length in the citation popover. Long enough to confirm the claim,
 #: short enough not to become a way of reading a whole restricted document
@@ -169,16 +193,17 @@ def resolve_markers(text: str, evidence: list[EvidenceItem]) -> ResolvedAnswer:
     unresolved: list[str] = []
 
     def replace(match: re.Match[str]) -> str:
-        chunk_id = match.group(1)
-        item = by_id.get(chunk_id)
-        if item is None:
-            unresolved.append(chunk_id)
-            return ""
-        if chunk_id not in assigned:
-            number = len(assigned) + 1
-            assigned[chunk_id] = number
-            citations.append(item.to_citation(number))
-        return f"[{assigned[chunk_id]}]"
+        numbers: list[int] = []
+        for chunk_id in _marker_ids(match.group(1)):
+            item = by_id.get(chunk_id)
+            if item is None:
+                unresolved.append(chunk_id)
+                continue
+            if chunk_id not in assigned:
+                assigned[chunk_id] = len(assigned) + 1
+                citations.append(item.to_citation(assigned[chunk_id]))
+            numbers.append(assigned[chunk_id])
+        return "".join(f"[{n}]" for n in numbers)
 
     resolved = CITE_PATTERN.sub(replace, text)
     # Removing a marker can leave " ." or a double space behind.
