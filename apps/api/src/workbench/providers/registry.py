@@ -64,6 +64,9 @@ class ModelRegistry:
         self._profiles: dict[str, dict[str, Any]] = {}
         self._rerank: dict[str, Any] = {}
         self._raw: dict[str, Any] = {}
+        #: Logical names confirmed present on their backend. Empty until
+        #: ``probe_availability`` runs; see ``lane_candidates``.
+        self._available: set[str] | None = None
         self.load()
 
     # ------------------------------------------------------------------ load
@@ -221,13 +224,81 @@ class ModelRegistry:
         return self.get_provider(self.get_model(logical_name).provider)
 
     def lane_candidates(self, lane: Lane | str) -> list[ModelInfo]:
-        """Ordered candidates for a lane, skipping disabled backends."""
+        """Ordered candidates for a lane.
+
+        Excludes disabled backends and — once availability has been probed —
+        models the backend does not actually serve. A manifest describes intent;
+        what is installed is a separate fact, and routing to a model that was
+        never pulled would fail at request time and only then fall back.
+        """
         key = lane.value if isinstance(lane, Lane) else lane
-        return [
+        candidates = [
             self._models[name]
             for name in self._lanes.get(key, [])
             if name in self._models and self._models[name].provider in self._providers
         ]
+        if self._available is None:
+            return candidates
+
+        present = [info for info in candidates if info.logical_name in self._available]
+        # If nothing in the lane is installed, hand back the declared candidates
+        # anyway: a clear downstream failure naming the missing model beats an
+        # opaque "no model satisfies this request".
+        return present or candidates
+
+    async def probe_availability(self) -> dict[str, bool]:
+        """Ask each backend which manifest models it can actually serve.
+
+        Called at startup and by ``POST /models/reload``. Ollama reports tags
+        with an implicit ``:latest``, so comparison normalises that away.
+        """
+        available: set[str] = set()
+        report: dict[str, bool] = {}
+        by_provider: dict[str, set[str]] = {}
+
+        for name, provider in self._providers.items():
+            try:
+                served = await provider.list_models()
+            except Exception as exc:  # noqa: BLE001 - a down backend is not fatal
+                log.warning("provider_model_list_failed", provider=name, error=str(exc))
+                by_provider[name] = set()
+                continue
+            normalised: set[str] = set()
+            for model_id in served:
+                normalised.add(model_id)
+                if model_id.endswith(":latest"):
+                    normalised.add(model_id[: -len(":latest")])
+            by_provider[name] = normalised
+
+        for logical, info in self._models.items():
+            if info.provider == "mock":
+                available.add(logical)
+                report[logical] = True
+                continue
+            served = by_provider.get(info.provider)
+            if served is None:
+                report[logical] = False
+                continue
+            present = info.physical_id in served or f"{info.physical_id}:latest" in served
+            report[logical] = present
+            if present:
+                available.add(logical)
+
+        self._available = available
+        missing = sorted(name for name, ok in report.items() if not ok)
+        if missing:
+            log.warning(
+                "models_declared_but_not_installed",
+                missing=missing,
+                hint="run scripts/pull_models.sh",
+            )
+        return report
+
+    def is_available(self, logical_name: str) -> bool:
+        """Whether the backend confirmed it serves this model."""
+        if self._available is None:
+            return True
+        return logical_name in self._available
 
     def profile(self, name: str) -> dict[str, Any]:
         if name not in self._profiles:

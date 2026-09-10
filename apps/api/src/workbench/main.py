@@ -95,6 +95,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         log.error("database_init_failed", error=str(exc))
         app.state.db_ready = False
 
+    # A manifest declares intent; what is installed is a separate fact. Probing
+    # at boot keeps the router from selecting a model that was never pulled and
+    # only discovering it mid-request.
+    try:
+        availability = await registry.probe_availability()
+        missing = sorted(name for name, ok in availability.items() if not ok)
+        if missing:
+            log.warning("models_missing", models=missing, hint="scripts/pull_models.sh")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("model_availability_probe_failed", error=str(exc))
+
     log.info(
         "workbench_started",
         version=__version__,
