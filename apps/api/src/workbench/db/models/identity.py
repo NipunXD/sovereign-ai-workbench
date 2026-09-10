@@ -6,7 +6,9 @@ identity provider to federate with. The role/permission tables are seeded from
 change written to the audit log.
 """
 
-from __future__ import annotations
+# NOTE: no `from __future__ import annotations` here. PEP 563 turns
+# `list["Role"]` into a nested-quoted string that SQLAlchemy cannot resolve when
+# it configures relationship mappers, so this module keeps runtime annotations.
 
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -49,7 +51,9 @@ class Permission(SQLModel, table=True):
     description: str = ""
 
     roles: list["Role"] = Relationship(
-        back_populates="permissions", link_model=RolePermissionLink
+        back_populates="permissions",
+        link_model=RolePermissionLink,
+        sa_relationship_kwargs={"lazy": "selectin"},
     )
 
 
@@ -65,10 +69,24 @@ class Role(SQLModel, table=True):
     is_system: bool = True
     created_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
 
+    # Eager by default: under asyncio a lazy load raises MissingGreenlet the
+    # moment anything touches the collection outside an await, and permissions
+    # are read on essentially every authenticated request anyway.
     permissions: list[Permission] = Relationship(
-        back_populates="roles", link_model=RolePermissionLink
+        back_populates="roles",
+        link_model=RolePermissionLink,
+        sa_relationship_kwargs={"lazy": "selectin"},
     )
-    users: list["User"] = Relationship(back_populates="roles", link_model=UserRoleLink)
+    # user_roles carries two foreign keys to users — the grantee and whoever
+    # granted the role — so the join has to be stated explicitly.
+    users: list["User"] = Relationship(
+        back_populates="roles",
+        link_model=UserRoleLink,
+        sa_relationship_kwargs={
+            "primaryjoin": "Role.id == UserRoleLink.role_id",
+            "secondaryjoin": "User.id == UserRoleLink.user_id",
+        },
+    )
 
 
 class User(SQLModel, table=True):
@@ -97,7 +115,17 @@ class User(SQLModel, table=True):
     created_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
     updated_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
 
-    roles: list[Role] = Relationship(back_populates="users", link_model=UserRoleLink)
+    roles: list[Role] = Relationship(
+        back_populates="users",
+        link_model=UserRoleLink,
+        sa_relationship_kwargs={
+            "primaryjoin": "User.id == UserRoleLink.user_id",
+            "secondaryjoin": "Role.id == UserRoleLink.role_id",
+            # Roles are needed on nearly every authenticated request; a lazy
+            # load here would mean an extra round trip per request.
+            "lazy": "selectin",
+        },
+    )
 
     @property
     def is_locked(self) -> bool:
