@@ -15,8 +15,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlmodel import col
 
+from workbench.agent.deferred import execute_approved
 from workbench.api.deps import Audit, CurrentPrincipal, DbSession, require_permission
 from workbench.core.errors import NotFoundError
+from workbench.core.logging import get_logger
 from workbench.db.models import (
     Approval,
     Artifact,
@@ -24,6 +26,8 @@ from workbench.db.models import (
     User,
 )
 from workbench.security.rbac import Principal
+
+log = get_logger(__name__)
 
 router = APIRouter(tags=["approvals"])
 
@@ -153,6 +157,22 @@ async def decide(
             )
             artifact.provenance = provenance
             await session.flush()
+
+    # Carry out what was approved, now, rather than leaving it to a run that
+    # may be long gone. Idempotent: if the requesting run is still connected
+    # and got there first, this reads its result instead of repeating it.
+    if payload.approved:
+        await session.commit()
+        outcome = await execute_approved(
+            approval_id, tools=request.app.state.tools, principal=principal
+        )
+        if outcome:
+            log.info(
+                "approval_action_carried_out",
+                approval_id=approval_id,
+                tool=outcome.get("tool"),
+                ok=outcome.get("ok", True),
+            )
 
     return await _serialise(session, approval, principal)
 

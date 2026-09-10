@@ -7,6 +7,8 @@ standing between "the AI produced a number" and a reader being able to check it.
 
 from __future__ import annotations
 
+import pytest
+
 from workbench.artifacts.provenance import Provenance
 from workbench.core.ir import BBox
 from workbench.rag.citations import Citation
@@ -105,3 +107,73 @@ def test_no_sources_is_stated_rather_than_left_blank() -> None:
 def test_the_digest_identifies_the_exact_file() -> None:
     provenance = Provenance(sha256="a" * 64)
     assert dict(provenance.lines())["Document digest"] == "a" * 64
+
+
+class TestCitationRoundTrip:
+    """A citation has to survive a trip through the database.
+
+    An approval carries the run's provenance so a document can be produced
+    after the run has gone, and JSONB stores dictionaries rather than
+    dataclasses. The first version stored the objects directly and the insert
+    failed with "Object of type Citation is not JSON serializable" — at the
+    moment approval was requested, so the whole run died rather than the
+    document.
+    """
+
+    def test_a_citation_survives_as_dict_and_back(self) -> None:
+        from workbench.core.citation import Citation
+        from workbench.core.ir import BBox
+
+        original = Citation(
+            n=2,
+            chunk_id="chk_1",
+            doc_id="doc_1",
+            doc_title="Inspection Report V-1201",
+            doc_type="inspection",
+            page_no=3,
+            bbox=BBox(x0=0.1, y0=0.2, x1=0.8, y1=0.4),
+            snippet="CML-04 measured 9.20 mm",
+            section_path=["2. Thickness Survey"],
+            score=0.87,
+            retrieval_method="hybrid",
+            confidence=0.61,
+        )
+        restored = Citation.from_dict(original.as_dict())
+
+        assert restored.doc_title == original.doc_title
+        assert restored.page_no == original.page_no
+        assert restored.snippet == original.snippet
+        assert restored.section_path == original.section_path
+        # The confidence is what marks a figure read off a bad photocopy, so
+        # losing it in transit would quietly drop the warning from the page.
+        assert restored.confidence == pytest.approx(0.61)
+        assert restored.bbox.x0 == pytest.approx(0.1)
+        assert restored.bbox.y1 == pytest.approx(0.4)
+
+    def test_an_older_record_without_every_key_still_loads(self) -> None:
+        from workbench.core.citation import Citation
+
+        restored = Citation.from_dict({"n": 1, "chunk_id": "c", "doc_id": "d"})
+        assert restored.doc_title == ""
+        assert restored.confidence == 1.0
+
+    def test_the_run_context_round_trips_for_storage(self) -> None:
+        from workbench.agent.deferred import from_storable, to_storable
+        from workbench.core.citation import Citation
+
+        context = {
+            "models": {"reasoning": "qwen/qwen3-8b"},
+            "citations": [Citation(n=1, chunk_id="c1", doc_id="d1", doc_title="Report", page_no=1)],
+            "tools": ["search_corpus"],
+        }
+        stored = to_storable(context)
+
+        # Storable means exactly that: it has to go into a JSONB column.
+        import json
+
+        json.dumps(stored)
+
+        restored = from_storable(stored)
+        assert isinstance(restored["citations"][0], Citation)
+        assert restored["citations"][0].doc_title == "Report"
+        assert restored["models"] == context["models"]

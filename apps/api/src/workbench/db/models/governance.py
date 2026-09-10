@@ -103,11 +103,30 @@ class Approval(SQLModel, table=True):
     )
     payload_digest: str | None = Field(default=None, max_length=64)
 
+    #: Everything needed to carry out the approved action later, without the
+    #: run that requested it. Held because an approver is a person with a day
+    #: of their own: the requester's connection lasts minutes, and a decision
+    #: that only counts while they wait is a decision made under the wrong
+    #: pressure. The arguments are bound before approval is asked for, so this
+    #: is also what the approver is agreeing to — a summary of an action whose
+    #: details are still undecided is not something anyone can sign off.
+    deferred: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
+    )
+
     status: str = Field(default=ApprovalStatus.PENDING, index=True)
     decided_by: str | None = Field(default=None, foreign_key="users.id")
     decided_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
     comment: str | None = None
     expires_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
+
+    #: Set once the approved action has actually been carried out, so it
+    #: happens exactly once whoever gets there first — the waiting run or the
+    #: approval itself.
+    executed_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
+    execution_result: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
+    )
 
 
 class SandboxExecution(SQLModel, table=True):

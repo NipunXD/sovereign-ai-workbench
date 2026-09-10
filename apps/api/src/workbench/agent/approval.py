@@ -17,7 +17,7 @@ the API has restarted.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any
 
@@ -45,6 +45,9 @@ class ApprovalRequest:
     subject_id: str
     summary: dict[str, Any]
     reason: str = ""
+    #: What to carry out if this is approved, so the decision can be acted on
+    #: after the requesting run has gone. See Approval.deferred.
+    deferred: dict[str, Any] = field(default_factory=dict)
 
 
 class ApprovalGate:
@@ -78,6 +81,7 @@ class ApprovalGate:
                 requested_by=principal.user_id,
                 payload_summary=request.summary,
                 payload_digest=digest(request.summary),
+                deferred=dict(request.deferred),
                 status=ApprovalStatus.PENDING,
                 expires_at=now() + timedelta(hours=self.expiry_hours),
             )

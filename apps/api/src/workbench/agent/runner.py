@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from workbench.agent.artifact_intent import FORMAT_NAMES, detect_format, requested_artifact
+from workbench.agent.deferred import execute_approved, to_storable
 from workbench.agent.prompts import (
     PLANNER_PROMPT,
     QUERY_REWRITE_PROMPT,
@@ -65,7 +66,11 @@ DEFAULT_MAX_TOKENS = 1024
 #: The failure was silent and looked like the wrong thing: "could not produce
 #: valid arguments for this tool", as though the model could not follow the
 #: schema, when it had followed it perfectly and been cut off mid-sentence.
-ARGUMENT_MAX_TOKENS = 6144
+#:
+#: 4096 against a measured 665 for a four-section report on the seed corpus.
+#: The margin is for the ceiling, not the average — a survey with a dozen
+#: CMLs and a table per section is the case that must not truncate.
+ARGUMENT_MAX_TOKENS = 4096
 
 MAX_RETRIEVE_LOOPS = 3
 MAX_VALIDATE_LOOPS = 2
@@ -157,7 +162,13 @@ class AgentRunner:
         residency: Any = None,
         approval_gate: Any = None,
         approval_wait_s: float = 180.0,
-        arg_binding_timeout_s: float = 90.0,
+        # Raised from 90s with the token allowance above. The two are one
+        # setting in practice: a budget large enough to hold a document is
+        # also long enough to generate that the old bound started firing,
+        # trading a truncated document for no document at all. A measured
+        # four-section report takes 46s on the 8B model here; the run's own
+        # wall budget (300s) remains the real ceiling.
+        arg_binding_timeout_s: float = 240.0,
     ) -> None:
         self.router = router
         self.registry = registry
@@ -706,6 +717,22 @@ class AgentRunner:
                 subject_type="tool",
                 subject_id=step.tool or "",
                 summary=summary,
+                # Enough to carry this out later, without this run. The
+                # arguments are already bound — they were needed to ask the
+                # question — so an approver deciding tomorrow approves exactly
+                # what an approver deciding now would have.
+                deferred={
+                    # The run that asked, so the document traces back to it
+                    # rather than to the approval — without this the
+                    # provenance page names the approval id as the run, and
+                    # the trail stops one link short of the conversation.
+                    "run_id": state["run_id"],
+                    "tool": step.tool,
+                    "args": step.args,
+                    "run_context": to_storable(self._run_context(state)),
+                    "conversation_id": state.get("conversation_id"),
+                    "requested_by": state["principal"].username,
+                },
                 reason=f"{step.tool} requires approval before it runs",
             ),
         )
@@ -762,25 +789,15 @@ class AgentRunner:
         yield (None, None)
 
     async def _approver_name(self, user_id: str | None) -> str | None:
-        """Resolve an approver's username for the provenance block.
-
-        A user id in a document nobody can look up is not a record of who
-        approved it.
-        """
+        """Resolve an approver's name for the provenance block."""
         if not user_id:
             return None
         try:
-            from sqlalchemy import select
-            from sqlmodel import col
+            from workbench.db.session import session_scope
+            from workbench.security.identity import display_name
 
-            from workbench.db.models import User
-            from workbench.db.session import get_session_factory
-
-            async with get_session_factory()() as session:
-                user = (
-                    await session.execute(select(User).where(col(User.id) == user_id))
-                ).scalar_one_or_none()
-                return (user.full_name or user.username) if user else user_id
+            async with session_scope() as session:
+                return await display_name(session, user_id)
         except Exception:
             return user_id
 
@@ -811,7 +828,10 @@ class AgentRunner:
                 note = (
                     "the request was refused by an approver"
                     if decision is False
-                    else "the request is still waiting for an approver"
+                    else (
+                        "still waiting for an approver — the document will be "
+                        "produced when someone approves it, without this run"
+                    )
                 )
                 state["scratchpad"].append({"tool": step.tool, "ok": False, "error": note})
                 state["status"] = "awaiting_approval" if decision is None else "running"
@@ -820,6 +840,26 @@ class AgentRunner:
                     {"tool": step.tool, "ok": False, "error": note},
                 )
                 return
+
+            # Approved. The decision itself may already have carried the action
+            # out — whoever gets there first does the work exactly once — so
+            # take that result rather than generating a second copy.
+            approval_id = (state.get("approval") or {}).get("id")
+            if approval_id:
+                done = await execute_approved(
+                    approval_id, tools=self.tools, principal=state["principal"]
+                )
+                if done:
+                    budget.tool_calls_used += 1
+                    step.result_summary = done
+                    state["tool_results"].append({"tool": step.tool, **done})
+                    for artifact in done.get("artifacts") or []:
+                        state["artifacts"].append(artifact)
+                        yield TraceEvent(EventName.ARTIFACT_CREATED, artifact)
+                    state["scratchpad"].append({"tool": step.tool, **done})
+                    yield TraceEvent(EventName.TOOL_RESULT, {"tool": step.tool, **done})
+                    return
+
         ctx = ToolContext(
             principal=state["principal"],
             run_id=state["run_id"],

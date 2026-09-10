@@ -26,6 +26,7 @@ from workbench.agent.state import Budget
 from workbench.api.deps import CurrentPrincipal, DbSession, require_permission
 from workbench.api.sse import SSE_HEADERS, EventName, format_sse, with_heartbeat
 from workbench.api.v1.runs import close_run, open_run
+from workbench.artifacts.records import persist_artifact
 from workbench.core.ids import prefixed_id
 from workbench.core.logging import get_logger
 from workbench.db.models import AuditAction, RunStatus
@@ -280,45 +281,11 @@ async def _persist_artifact(
     principal: Principal,
     approved: bool = False,
 ) -> None:
-    """Record a generated artifact so it outlives the stream.
-
-    Written on its own session: the request transaction may still be streaming,
-    and an artifact that exists on disk but has no row is invisible to the
-    approval queue and undownloadable.
-    """
-    from sqlalchemy import select
-    from sqlmodel import col
-
-    from workbench.db.models import Artifact, ArtifactStatus
-    from workbench.db.session import session_scope
-
-    sha256 = str(payload.get("sha256") or "")
-    if not sha256:
-        return
-
-    try:
-        async with session_scope() as session:
-            existing = (
-                await session.execute(select(Artifact).where(col(Artifact.sha256) == sha256))
-            ).scalar_one_or_none()
-            if existing is not None:
-                return
-            session.add(
-                Artifact(
-                    run_id=run_id,
-                    conversation_id=conversation_id,
-                    created_by=principal.user_id,
-                    kind=str(payload.get("kind", "")),
-                    filename=str(payload.get("filename", "")),
-                    mime=str(payload.get("mime", "")),
-                    sha256=sha256,
-                    size_bytes=int(payload.get("size_bytes", 0)),
-                    storage_path="",
-                    provenance=dict(payload.get("provenance") or {}),
-                    status=(
-                        ArtifactStatus.APPROVED if approved else ArtifactStatus.PENDING_APPROVAL
-                    ),
-                )
-            )
-    except Exception as exc:
-        log.error("artifact_persist_failed", sha256=sha256[:12], error=str(exc))
+    """Record a generated artifact. See workbench.artifacts.records."""
+    await persist_artifact(
+        payload,
+        run_id=run_id,
+        conversation_id=conversation_id,
+        created_by=principal.user_id,
+        approved=approved,
+    )

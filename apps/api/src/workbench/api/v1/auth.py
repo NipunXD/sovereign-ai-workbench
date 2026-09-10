@@ -18,7 +18,7 @@ from workbench.api.deps import Audit, CurrentPrincipal, DbSession
 from workbench.core.clock import now
 from workbench.core.errors import AccountLockedError, AuthenticationError
 from workbench.core.logging import get_logger
-from workbench.db.models import AuditAction, Role, Session, User
+from workbench.db.models import AuditAction, Session, User
 from workbench.db.models.audit import Severity
 from workbench.security.auth import (
     generate_refresh_token,
@@ -27,6 +27,7 @@ from workbench.security.auth import (
     needs_rehash,
     verify_password,
 )
+from workbench.security.identity import roles_and_permissions
 
 log = get_logger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -107,29 +108,12 @@ async def _load_user(session: DbSession, username: str) -> User | None:
 async def _roles_and_permissions(
     session: DbSession, user: User
 ) -> tuple[list[str], list[str], str]:
-    """Read the user's effective access from the database.
+    """The user's effective access, read at login rather than trusted.
 
-    Read at login rather than trusted from the token, so a role change takes
-    effect on the next login rather than whenever a token happens to expire.
+    Delegates to workbench.security.identity, which a deferred approval also
+    uses to run an approved action as the requester.
     """
-    from workbench.core.classification import Classification
-    from workbench.db.models import UserRoleLink
-
-    roles = list(
-        (
-            await session.execute(
-                select(Role)
-                .join(UserRoleLink, col(UserRoleLink.role_id) == Role.id)
-                .where(col(UserRoleLink.user_id) == user.id)
-            )
-        ).scalars()
-    )
-    permissions = sorted({p.code for role in roles for p in role.permissions})
-    clearance = Classification.PUBLIC
-    for role in roles:
-        if Classification.clearance_rank(role.clearance) > Classification.clearance_rank(clearance):
-            clearance = role.clearance
-    return sorted(r.name for r in roles), permissions, clearance
+    return await roles_and_permissions(session, user)
 
 
 def _set_refresh_cookie(response: Response, token: str, days: int) -> None:

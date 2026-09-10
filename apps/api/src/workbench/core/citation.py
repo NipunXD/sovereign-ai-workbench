@@ -38,6 +38,32 @@ class Citation:
     doc_type: str = ""
     parent_id: str | None = None
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Citation:
+        """Rebuild a citation from :meth:`as_dict`.
+
+        Needed because a citation now has to survive a trip through the
+        database: an approval carries the run's provenance so the document can
+        be produced after the run has gone, and JSONB stores dictionaries, not
+        dataclasses. Unknown keys are ignored rather than raising, so a record
+        written by an older version still loads.
+        """
+        return cls(
+            n=int(data.get("n", 0)),
+            chunk_id=str(data.get("chunk_id", "")),
+            doc_id=str(data.get("doc_id", "")),
+            doc_title=str(data.get("doc_title", "")),
+            page_no=int(data.get("page_no", 1)),
+            bbox=BBox(**(data.get("bbox") or {})),
+            snippet=str(data.get("snippet", "")),
+            section_path=list(data.get("section_path") or []),
+            score=float(data.get("score", 0.0)),
+            retrieval_method=str(data.get("retrieval_method", "hybrid")),
+            confidence=float(data.get("confidence", 1.0)),
+            doc_type=str(data.get("doc_type", "")),
+            parent_id=data.get("parent_id"),
+        )
+
     def as_dict(self) -> dict[str, Any]:
         return {
             "n": self.n,
