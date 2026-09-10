@@ -75,9 +75,7 @@ def pytest_configure(config: pytest.Config) -> None:
     os.environ.setdefault("WORKBENCH_DETERMINISTIC", "1")
 
 
-def pytest_collection_modifyitems(
-    config: pytest.Config, items: list[pytest.Item]
-) -> None:
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """Skip backend-dependent tests unless explicitly opted into."""
     if not os.environ.get("OLLAMA_E2E"):
         skip_ollama = pytest.mark.skip(reason="set OLLAMA_E2E=1 to run against real models")

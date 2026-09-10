@@ -18,10 +18,8 @@ from workbench.api.deps import Audit, CurrentPrincipal, DbSession, require_permi
 from workbench.core.errors import NotFoundError
 from workbench.db.models import (
     Approval,
-    ApprovalStatus,
     Artifact,
     ArtifactStatus,
-    AuditAction,
     User,
 )
 from workbench.security.rbac import Principal
@@ -207,10 +205,7 @@ async def download_artifact(
         raise NotFoundError("No such artifact.")
 
     if artifact.status in (ArtifactStatus.DRAFT, ArtifactStatus.PENDING_APPROVAL):
-        may_see = (
-            artifact.created_by == principal.user_id
-            or principal.has("artifact:approve")
-        )
+        may_see = artifact.created_by == principal.user_id or principal.has("artifact:approve")
         if not may_see:
             await audit.deny(
                 "artifact.download",

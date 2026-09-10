@@ -31,7 +31,7 @@ async def gate(rbac_config_path):
     try:
         async with session_scope() as session:
             await session.execute(select(User).limit(1))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         await dispose_engine()
         pytest.skip(f"database unavailable: {exc}")
 
@@ -67,7 +67,9 @@ async def test_a_second_person_can_approve(gate) -> None:
         step_id="s1",
         principal=requester,
         request=ApprovalRequest(
-            kind="artifact", subject_type="artifact", subject_id="sha_ok",
+            kind="artifact",
+            subject_type="artifact",
+            subject_id="sha_ok",
             summary={"tool": "artifact.docx"},
         ),
     )
@@ -95,7 +97,10 @@ async def test_the_requester_cannot_approve_their_own_request(gate) -> None:
         step_id="s1",
         principal=requester,
         request=ApprovalRequest(
-            kind="artifact", subject_type="artifact", subject_id="sha_self", summary={},
+            kind="artifact",
+            subject_type="artifact",
+            subject_id="sha_self",
+            summary={},
         ),
     )
     with pytest.raises(AuthorizationError, match="your own request"):
@@ -115,7 +120,10 @@ async def test_a_decision_cannot_be_revisited(gate) -> None:
         step_id="s1",
         principal=requester,
         request=ApprovalRequest(
-            kind="tool", subject_type="tool", subject_id="code.run_python", summary={},
+            kind="tool",
+            subject_type="tool",
+            subject_id="code.run_python",
+            summary={},
         ),
     )
     await approvals.decide(approval.id, approver=approver, approved=False, comment="no")
@@ -145,7 +153,10 @@ async def test_a_stale_request_expires_rather_than_waiting_forever(gate) -> None
         step_id="s1",
         principal=requester,
         request=ApprovalRequest(
-            kind="tool", subject_type="tool", subject_id="artifact.xlsx", summary={},
+            kind="tool",
+            subject_type="tool",
+            subject_id="artifact.xlsx",
+            summary={},
         ),
     )
 
@@ -178,7 +189,10 @@ async def test_requesting_and_deciding_are_both_audited(gate) -> None:
         step_id="s1",
         principal=requester,
         request=ApprovalRequest(
-            kind="artifact", subject_type="artifact", subject_id="sha_audit", summary={},
+            kind="artifact",
+            subject_type="artifact",
+            subject_id="sha_audit",
+            summary={},
         ),
     )
     await approvals.decide(approval.id, approver=approver, approved=True, comment="fine")

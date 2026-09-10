@@ -89,20 +89,34 @@ PARAMETERS: dict[str, dict[str, Any]] = {
     },
     "lmtd": {
         "required": ["delta_t1", "delta_t2"],
-        "aliases": {"dt1": "delta_t1", "dt2": "delta_t2",
-                    "hot_end_approach": "delta_t1", "cold_end_approach": "delta_t2"},
+        "aliases": {
+            "dt1": "delta_t1",
+            "dt2": "delta_t2",
+            "hot_end_approach": "delta_t1",
+            "cold_end_approach": "delta_t2",
+        },
     },
     "heat_duty": {
         "required": ["mass_flow", "specific_heat", "delta_t"],
-        "aliases": {"flow": "mass_flow", "flow_rate": "mass_flow",
-                    "cp": "specific_heat", "temperature_rise": "delta_t", "dt": "delta_t"},
+        "aliases": {
+            "flow": "mass_flow",
+            "flow_rate": "mass_flow",
+            "cp": "specific_heat",
+            "temperature_rise": "delta_t",
+            "dt": "delta_t",
+        },
     },
     "orifice_flow": {
         "required": ["beta", "orifice_diameter", "differential_pressure", "density"],
         "optional": ["discharge_coefficient"],
-        "aliases": {"beta_ratio": "beta", "diameter": "orifice_diameter",
-                    "dp": "differential_pressure", "delta_p": "differential_pressure",
-                    "fluid_density": "density", "cd": "discharge_coefficient"},
+        "aliases": {
+            "beta_ratio": "beta",
+            "diameter": "orifice_diameter",
+            "dp": "differential_pressure",
+            "delta_p": "differential_pressure",
+            "fluid_density": "density",
+            "cd": "discharge_coefficient",
+        },
     },
 }
 
@@ -194,8 +208,7 @@ class EngineeringCalcTool(BaseTool):
         description=(
             "Perform a standard refinery engineering calculation with dimensional "
             "checking. Every quantity must carry its unit, e.g. '9.2 mm', '6 year', "
-            "'15 bar'. Required inputs per calculation — "
-            + describe_parameters()
+            "'15 bar'. Required inputs per calculation — " + describe_parameters()
         ),
         input_model=CalcInput,
         output_model=CalcOutput,
@@ -218,8 +231,11 @@ class EngineeringCalcTool(BaseTool):
             return ToolResult.failure(
                 f"missing required input(s) for {args.calculation}: {', '.join(missing)}. "
                 f"Expected: {', '.join(expected.get('required', []))}"
-                + (f" (optional: {', '.join(expected.get('optional', []))})"
-                   if expected.get("optional") else "")
+                + (
+                    f" (optional: {', '.join(expected.get('optional', []))})"
+                    if expected.get("optional")
+                    else ""
+                )
             )
 
         try:
@@ -237,7 +253,7 @@ class EngineeringCalcTool(BaseTool):
             return ToolResult.failure(f"dimensional error: {exc}")
         except ZeroDivisionError:
             return ToolResult.failure("division by zero — check the interval or rate inputs")
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             return ToolResult.failure(f"{type(exc).__name__}: {exc}")
 
         if ignored:
@@ -400,7 +416,9 @@ class EngineeringCalcTool(BaseTool):
                 )
             ],
             standard_ref="ASME VIII Div.1 UG-27 rearranged for MAWP",
-            assumptions=["Thickness is the actual measured value less any future corrosion allowance."],
+            assumptions=[
+                "Thickness is the actual measured value less any future corrosion allowance."
+            ],
         )
 
     # ------------------------------------------------------------ process
@@ -467,16 +485,16 @@ class EngineeringCalcTool(BaseTool):
         diameter = q["orifice_diameter"].to("m")
         delta_p = q["differential_pressure"].to("Pa")
         density = q["density"].to("kg/m**3")
-        discharge = float(q["discharge_coefficient"].magnitude) if "discharge_coefficient" in q else 0.61
+        discharge = (
+            float(q["discharge_coefficient"].magnitude) if "discharge_coefficient" in q else 0.61
+        )
 
         if not 0 < beta < 1:
             raise ValueError("beta ratio must be between 0 and 1")
 
         area = math.pi * (diameter.magnitude**2) / 4 * _units("m**2")
         velocity_factor = 1 / math.sqrt(1 - beta**4)
-        flow = (
-            discharge * velocity_factor * area * (2 * delta_p / density) ** 0.5
-        ).to("m**3/s")
+        flow = (discharge * velocity_factor * area * (2 * delta_p / density) ** 0.5).to("m**3/s")
 
         return CalcOutput(
             calculation="orifice_flow",

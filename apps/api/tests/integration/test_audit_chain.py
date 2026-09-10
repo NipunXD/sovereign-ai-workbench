@@ -8,8 +8,6 @@ self-consistent, which is not the claim being made.
 
 from __future__ import annotations
 
-import os
-
 import pytest
 from sqlalchemy import text
 
@@ -34,7 +32,7 @@ async def db():
     try:
         async with session_scope() as session:
             await session.execute(text("SELECT 1"))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         await dispose_engine()
         pytest.skip(f"database unavailable: {exc}")
     yield
@@ -98,9 +96,7 @@ async def test_the_database_refuses_to_delete_an_audit_row(db: None) -> None:
 
     with pytest.raises(Exception, match="append-only"):
         async with session_scope() as session:
-            await session.execute(
-                text("DELETE FROM audit_events WHERE seq = :seq"), {"seq": seq}
-            )
+            await session.execute(text("DELETE FROM audit_events WHERE seq = :seq"), {"seq": seq})
 
 
 async def test_tampering_is_detected_at_the_exact_row(db: None) -> None:

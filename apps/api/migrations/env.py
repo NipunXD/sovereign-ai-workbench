@@ -11,15 +11,14 @@ import asyncio
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy.ext.asyncio import async_engine_from_config
 from sqlalchemy import pool
-
-from workbench.settings import get_settings
+from sqlalchemy.ext.asyncio import async_engine_from_config
 
 # Importing the models package registers every table on SQLModel.metadata.
 # A table that is never imported is silently omitted from autogenerate.
 import workbench.db.models  # noqa: F401
 from workbench.db.base import metadata
+from workbench.settings import get_settings
 
 config = context.config
 if config.config_file_name is not None:

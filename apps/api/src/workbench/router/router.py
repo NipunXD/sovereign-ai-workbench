@@ -279,10 +279,9 @@ class ModelRouter:
             weight("long_ctx", "summarize_whole_doc") * features.summarise_document
             + weight("long_ctx", "multi_document_mention") * features.multi_document
         )
-        scores[Lane.VISION] = (
-            weight("vision", "drawing_noun") * min(features.drawing_noun_hits, 2)
-            + weight("vision", "spatial_verb") * min(features.spatial_verb_hits, 2)
-        )
+        scores[Lane.VISION] = weight("vision", "drawing_noun") * min(
+            features.drawing_noun_hits, 2
+        ) + weight("vision", "spatial_verb") * min(features.spatial_verb_hits, 2)
         scores[Lane.UTILITY] = weight("utility", "very_short_query") * features.is_very_short
 
         ranked = sorted(scores.items(), key=lambda pair: pair[1], reverse=True)
@@ -302,7 +301,11 @@ class ModelRouter:
             return None, 0.0, f"ambiguous: {top_lane.value} {top_score:.2f} vs {runner_up:.2f}"
 
         confidence = min(1.0, (top_score - runner_up) / max(top_score, 1.0))
-        return top_lane, confidence, f"lexical score {top_score:.2f} (margin {top_score - runner_up:.2f})"
+        return (
+            top_lane,
+            confidence,
+            f"lexical score {top_score:.2f} (margin {top_score - runner_up:.2f})",
+        )
 
     # ---------------------------------------------------------------- stage 2
     async def _stage2_decide(self, text: str) -> tuple[Lane, float, str]:
@@ -338,7 +341,7 @@ class ModelRouter:
             lane = Lane(parsed["lane"])
             confidence = float(parsed.get("confidence", 0.5))
             reason = f"classifier: {str(parsed.get('reason', ''))[:120]}"
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             # A classifier failure must never block a user request; the default
             # lane handles anything, just not always optimally.
             log.warning("router_stage2_failed", error=str(exc))
@@ -372,7 +375,9 @@ class ModelRouter:
                 reason="explicit model hint",
                 decide_latency_ms=(time.perf_counter() - started) * 1000,
                 resident=bool(self.residency and self.residency.is_resident(info.logical_name)),
-                swap_cost_s=self.residency.swap_cost_s(info.logical_name) if self.residency else 0.0,
+                swap_cost_s=self.residency.swap_cost_s(info.logical_name)
+                if self.residency
+                else 0.0,
                 features_digest=features.digest(),
             )
 
@@ -418,7 +423,7 @@ class ModelRouter:
                 residency=self.residency,
                 exclude=attempted | {decision.model.logical_name},
             )
-        except Exception:  # noqa: BLE001 - lane exhausted
+        except Exception:
             return None
         return RouteDecision(
             lane=decision.lane,

@@ -44,9 +44,15 @@ ignore = [
     "B008",    # FastAPI Depends() in defaults is the framework idiom
     "S101",    # assert is fine in tests
 ]
+# Engineering notation, not homoglyph smuggling: ρ for density, × for vessel
+# dimensions, − as a typographic minus in measured values. Spelling these as
+# ASCII would make the domain text wrong to read.
+allowed-confusables = ["×", "−", "ρ"]
 
 [tool.ruff.lint.per-file-ignores]
-"apps/api/tests/**" = ["S", "N806"]
+# ASYNC240: blocking pathlib in an async *test* is not a served-request
+# latency concern, which is what the rule exists to catch.
+"apps/api/tests/**" = ["S", "N806", "ASYNC240"]
 "evals/**" = ["S"]
 "services/sandbox/**" = ["S"]
 

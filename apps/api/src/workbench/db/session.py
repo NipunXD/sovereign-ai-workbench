@@ -5,7 +5,12 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from workbench.core.logging import get_logger
 from workbench.settings import Settings
@@ -22,14 +27,14 @@ def create_engine(settings: Settings) -> AsyncEngine:
         echo=settings.db_echo,
         pool_size=settings.db_pool_size,
         max_overflow=settings.db_max_overflow,
-        pool_pre_ping=True,      # a recycled connection must not fail a request
+        pool_pre_ping=True,  # a recycled connection must not fail a request
         pool_recycle=1800,
     )
 
 
 def init_engine(settings: Settings) -> AsyncEngine:
     """Create the process-wide engine. Called once during app startup."""
-    global _engine, _session_factory  # noqa: PLW0603
+    global _engine, _session_factory
     _engine = create_engine(settings)
     _session_factory = async_sessionmaker(
         _engine,
@@ -81,7 +86,7 @@ async def get_db() -> AsyncIterator[AsyncSession]:
 
 
 async def dispose_engine() -> None:
-    global _engine, _session_factory  # noqa: PLW0603
+    global _engine, _session_factory
     if _engine is not None:
         await _engine.dispose()
     _engine = None

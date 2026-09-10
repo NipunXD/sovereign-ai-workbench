@@ -113,14 +113,12 @@ class ToolRegistry:
             return True
         if touched_restricted and self._policy.get("restricted_source_forces_approval", True):
             return True
-        if is_engineering_calc and self._policy.get("engineering_calc_forces_final_approval", True):
-            return True
-        return False
+        return bool(
+            is_engineering_calc and self._policy.get("engineering_calc_forces_final_approval", True)
+        )
 
     # -------------------------------------------------------------- dispatch
-    async def dispatch(
-        self, name: str, raw_args: dict[str, Any], ctx: ToolContext
-    ) -> ToolResult:
+    async def dispatch(self, name: str, raw_args: dict[str, Any], ctx: ToolContext) -> ToolResult:
         """Validate, authorise and run a tool call.
 
         Permission is re-checked here even though the catalogue already filtered:
@@ -138,9 +136,17 @@ class ToolRegistry:
                 required_permission=sorted(missing)[0],
             )
 
-        args = tool.parse_args(raw_args) if hasattr(tool, "parse_args") else spec.input_model.model_validate(raw_args)
+        args = (
+            tool.parse_args(raw_args)
+            if hasattr(tool, "parse_args")
+            else spec.input_model.model_validate(raw_args)
+        )
 
-        timeout = min(spec.timeout_s, ctx.remaining_s) if ctx.remaining_s != float("inf") else spec.timeout_s
+        timeout = (
+            min(spec.timeout_s, ctx.remaining_s)
+            if ctx.remaining_s != float("inf")
+            else spec.timeout_s
+        )
         if timeout <= 0:
             return ToolResult.failure(f"'{name}' skipped: the run's time budget is exhausted")
 
@@ -154,7 +160,7 @@ class ToolRegistry:
             result = ToolResult.failure(f"'{name}' exceeded its {timeout:.0f}s timeout")
         except (ToolError, AuthorizationError):
             raise
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             # A tool failing must not kill the run; the agent sees the error and
             # can replan or report honestly.
             log.exception("tool_failed", tool=name, error=str(exc))

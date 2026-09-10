@@ -41,23 +41,40 @@ class ScanProfile:
 PROFILES: dict[str, ScanProfile] = {
     "clean": ScanProfile("clean", jpeg_quality=95, target_dpi=300),
     "office": ScanProfile(
-        "office", skew_degrees=0.4, blur_kernel=3, speckle=0.004,
-        jpeg_quality=80, target_dpi=200,
+        "office",
+        skew_degrees=0.4,
+        blur_kernel=3,
+        speckle=0.004,
+        jpeg_quality=80,
+        target_dpi=200,
     ),
     "photocopy": ScanProfile(
-        "photocopy", skew_degrees=1.2, blur_kernel=3, speckle=0.015,
-        jpeg_quality=65, contrast=1.25, gradient=0.18, target_dpi=200,
+        "photocopy",
+        skew_degrees=1.2,
+        blur_kernel=3,
+        speckle=0.015,
+        jpeg_quality=65,
+        contrast=1.25,
+        gradient=0.18,
+        target_dpi=200,
     ),
     "fax": ScanProfile(
-        "fax", skew_degrees=2.1, blur_kernel=5, speckle=0.03,
-        jpeg_quality=45, brightness=0.9, contrast=1.4, gradient=0.25, target_dpi=150,
+        "fax",
+        skew_degrees=2.1,
+        blur_kernel=5,
+        speckle=0.03,
+        jpeg_quality=45,
+        brightness=0.9,
+        contrast=1.4,
+        gradient=0.25,
+        target_dpi=150,
     ),
 }
 
 
 def degrade(image: np.ndarray, profile: ScanProfile, *, seed: int = 0) -> np.ndarray:
     """Apply a scan profile to a rendered page."""
-    rng = random.Random(seed)
+    rng = random.Random(seed)  # noqa: S311 — reproducible scan noise, not a secret
     working = image.copy()
 
     if profile.skew_degrees:
@@ -67,8 +84,11 @@ def degrade(image: np.ndarray, profile: ScanProfile, *, seed: int = 0) -> np.nda
         height, width = working.shape[:2]
         matrix = cv2.getRotationMatrix2D((width / 2, height / 2), angle, 1.0)
         working = cv2.warpAffine(
-            working, matrix, (width, height),
-            flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE,
+            working,
+            matrix,
+            (width, height),
+            flags=cv2.INTER_CUBIC,
+            borderMode=cv2.BORDER_REPLICATE,
         )
 
     if profile.brightness != 1.0 or profile.contrast != 1.0:
@@ -92,8 +112,8 @@ def degrade(image: np.ndarray, profile: ScanProfile, *, seed: int = 0) -> np.nda
         noise = np.zeros(working.shape[:2], dtype=np.uint8)
         cv2.randu(noise, 0, 255)
         threshold = int(profile.speckle * 255)
-        working[noise < threshold] = 0                      # pepper
-        working[noise > (255 - threshold)] = 255            # salt
+        working[noise < threshold] = 0  # pepper
+        working[noise > (255 - threshold)] = 255  # salt
 
     if profile.jpeg_quality < 95:
         ok, buffer = cv2.imencode(
@@ -105,9 +125,7 @@ def degrade(image: np.ndarray, profile: ScanProfile, *, seed: int = 0) -> np.nda
     return working
 
 
-def pdf_to_scanned_pdf(
-    source: Path, target: Path, profile: ScanProfile, *, seed: int = 0
-) -> int:
+def pdf_to_scanned_pdf(source: Path, target: Path, profile: ScanProfile, *, seed: int = 0) -> int:
     """Render a native PDF to images, degrade them, and rebuild it as a scan.
 
     The result has no text layer at all, which is the point — it forces the
@@ -130,7 +148,9 @@ def pdf_to_scanned_pdf(
                 array = cv2.cvtColor(array, cv2.COLOR_RGB2BGR)
 
             damaged = degrade(array, profile, seed=seed + index)
-            ok, encoded = cv2.imencode(".jpg", damaged, [int(cv2.IMWRITE_JPEG_QUALITY), profile.jpeg_quality])
+            ok, encoded = cv2.imencode(
+                ".jpg", damaged, [int(cv2.IMWRITE_JPEG_QUALITY), profile.jpeg_quality]
+            )
             if not ok:
                 continue
 

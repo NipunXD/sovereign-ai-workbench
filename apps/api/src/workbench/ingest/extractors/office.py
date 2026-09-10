@@ -181,9 +181,7 @@ class PptxExtractor:
                     )
                 )
 
-            pages.append(
-                Page(page_no=index, width=1280, height=720, blocks=blocks)
-            )
+            pages.append(Page(page_no=index, width=1280, height=720, blocks=blocks))
 
         return DocumentIR(
             doc_id=doc_id,
@@ -264,7 +262,7 @@ class SpreadsheetExtractor:
                     order=1,
                     attrs={
                         "sheet": sheet_name,
-                        "total_rows": int(len(frame)),
+                        "total_rows": len(frame),
                         "sampled_rows": len(rows),
                         "columns": columns,
                     },
@@ -303,11 +301,9 @@ class SpreadsheetExtractor:
 
                     connection = duckdb.connect()
                     connection.register("sheet_data", frame)
-                    connection.execute(
-                        "COPY sheet_data TO ? (FORMAT PARQUET)", [dataset_path]
-                    )
+                    connection.execute("COPY sheet_data TO ? (FORMAT PARQUET)", [dataset_path])
                     connection.close()
-                except Exception as exc:  # noqa: BLE001 - the dataset is an optimisation
+                except Exception as exc:
                     log.warning("dataset_write_failed", sheet=sheet_name, error=str(exc))
                     dataset_path = ""
 
@@ -315,7 +311,7 @@ class SpreadsheetExtractor:
                 DatasetRef(
                     dataset_id=f"{doc_id}_ds{index}",
                     sheet_name=str(sheet_name),
-                    row_count=int(len(frame)),
+                    row_count=len(frame),
                     columns=[{"name": c, "dtype": "string"} for c in columns],
                     path=dataset_path,
                 )
@@ -367,16 +363,24 @@ class TextExtractor:
             if heading:
                 blocks.append(
                     Block(
-                        block_id=f"b{order}", page_no=1, type=BlockType.HEADING,
-                        text=heading.group(2).strip(), source=BlockSource.NATIVE,
-                        order=order, attrs={"level": len(heading.group(1))},
+                        block_id=f"b{order}",
+                        page_no=1,
+                        type=BlockType.HEADING,
+                        text=heading.group(2).strip(),
+                        source=BlockSource.NATIVE,
+                        order=order,
+                        attrs={"level": len(heading.group(1))},
                     )
                 )
             else:
                 blocks.append(
                     Block(
-                        block_id=f"b{order}", page_no=1, type=BlockType.PARAGRAPH,
-                        text=text, source=BlockSource.NATIVE, order=order,
+                        block_id=f"b{order}",
+                        page_no=1,
+                        type=BlockType.PARAGRAPH,
+                        text=text,
+                        source=BlockSource.NATIVE,
+                        order=order,
                     )
                 )
             order += 1

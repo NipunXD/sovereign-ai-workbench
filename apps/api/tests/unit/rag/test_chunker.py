@@ -45,7 +45,9 @@ def document(*blocks: Block, doc_id: str = "doc_test") -> DocumentIR:
     return DocumentIR(
         doc_id=doc_id,
         page_count=len(pages),
-        pages=[Page(page_no=n, width=1000, height=1000, blocks=bs) for n, bs in sorted(pages.items())],
+        pages=[
+            Page(page_no=n, width=1000, height=1000, blocks=bs) for n, bs in sorted(pages.items())
+        ],
     )
 
 

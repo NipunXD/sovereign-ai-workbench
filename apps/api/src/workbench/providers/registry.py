@@ -114,9 +114,7 @@ class ModelRegistry:
                         timeout_s=timeout,
                         admin_url=spec.get("native_admin_url"),
                         # vLLM's structured output extension differs from OpenAI's.
-                        structured_output_mode=(
-                            "guided_json" if name == "vllm" else "json_schema"
-                        ),
+                        structured_output_mode=("guided_json" if name == "vllm" else "json_schema"),
                     )
                 elif kind == "mock":
                     fixtures = spec.get("fixtures")
@@ -137,9 +135,7 @@ class ModelRegistry:
         for entry in entries:
             try:
                 logical = entry["logical"]
-                capabilities = frozenset(
-                    Capability(c) for c in entry.get("capabilities", ["chat"])
-                )
+                capabilities = frozenset(Capability(c) for c in entry.get("capabilities", ["chat"]))
                 models[logical] = ModelInfo(
                     logical_name=logical,
                     provider=entry["provider"],
@@ -168,9 +164,7 @@ class ModelRegistry:
             if info.provider not in self._providers:
                 # Not fatal on its own: a manifest may describe the GPU server's
                 # vLLM models while running on a laptop where vLLM is disabled.
-                log.debug(
-                    "model_provider_disabled", logical=logical, provider=info.provider
-                )
+                log.debug("model_provider_disabled", logical=logical, provider=info.provider)
 
         for lane, candidates in self._lanes.items():
             try:
@@ -198,9 +192,7 @@ class ModelRegistry:
                     )
 
         if problems:
-            raise ConfigurationError(
-                "model manifest is invalid:\n  - " + "\n  - ".join(problems)
-            )
+            raise ConfigurationError("model manifest is invalid:\n  - " + "\n  - ".join(problems))
 
     # ------------------------------------------------------------- accessors
     def get_model(self, logical_name: str) -> ModelInfo:
@@ -259,7 +251,7 @@ class ModelRegistry:
         for name, provider in self._providers.items():
             try:
                 served = await provider.list_models()
-            except Exception as exc:  # noqa: BLE001 - a down backend is not fatal
+            except Exception as exc:
                 log.warning("provider_model_list_failed", provider=name, error=str(exc))
                 by_provider[name] = set()
                 continue

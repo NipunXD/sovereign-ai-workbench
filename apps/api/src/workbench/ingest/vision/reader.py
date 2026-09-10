@@ -129,15 +129,10 @@ class VisionReader:
         self.tile_px = tile_px
         self.overlap_px = overlap_px
 
-    async def transcribe_page(
-        self, image_png: bytes, page_no: int
-    ) -> tuple[list[Block], float]:
+    async def transcribe_page(self, image_png: bytes, page_no: int) -> tuple[list[Block], float]:
         """Rescue a page OCR could not read."""
-        from workbench.providers.types import ChatMessage, GenerationRequest, ImageRef
 
-        text = await self._ask(
-            TRANSCRIBE_PROMPT, image_png, max_tokens=2048
-        )
+        text = await self._ask(TRANSCRIBE_PROMPT, image_png, max_tokens=2048)
         if not text.strip():
             return [], 0.0
 
@@ -182,8 +177,7 @@ class VisionReader:
 
         # Tags OCR independently found in the raw text, used as corroboration.
         ocr_tags = {
-            token.upper()
-            for token in re.findall(r"[A-Z]{1,3}-?\d{3,5}[A-Z]?", ocr_text.upper())
+            token.upper() for token in re.findall(r"[A-Z]{1,3}-?\d{3,5}[A-Z]?", ocr_text.upper())
         }
 
         found: dict[str, DrawingTag] = {}
@@ -292,7 +286,7 @@ class VisionReader:
                 )
             )
             return result.text
-        except Exception as exc:  # noqa: BLE001 - a VLM failure must not fail ingestion
+        except Exception as exc:
             log.warning("vision_read_failed", error=str(exc))
             return ""
 

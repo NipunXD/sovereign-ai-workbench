@@ -67,7 +67,10 @@ class Principal:
         # An empty department list means plant-wide; otherwise membership is
         # required. Admins are not special-cased here — an admin who should see
         # everything is given the departments to match.
-        if departments and self.departments and not (set(departments) & self.departments):
+        # Left as two statements rather than a single negated expression
+        # (SIM103): the collapsed form is a triple negative, and this is an
+        # access-control decision that has to be readable at a glance.
+        if departments and self.departments and not (set(departments) & self.departments):  # noqa: SIM103
             return False
         return True
 
@@ -95,8 +98,7 @@ class RbacConfig:
             raise ConfigurationError(f"{path} is not valid YAML: {exc}") from exc
 
         permissions = {
-            entry["code"]: entry.get("description", "")
-            for entry in raw.get("permissions") or []
+            entry["code"]: entry.get("description", "") for entry in raw.get("permissions") or []
         }
         roles = dict(raw.get("roles") or {})
 

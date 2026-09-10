@@ -8,7 +8,6 @@ captured, so the whole session chain is revoked rather than just that token.
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import Annotated, Any
 
 from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel, Field
@@ -41,7 +40,7 @@ class LoginRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
-    token_type: str = "bearer"
+    token_type: str = "bearer"  # noqa: S105 — the RFC 6750 scheme name, not a secret
     expires_in: int
     username: str
     roles: list[str]
@@ -104,7 +103,9 @@ async def _load_user(session: DbSession, username: str) -> User | None:
     ).scalar_one_or_none()
 
 
-async def _roles_and_permissions(session: DbSession, user: User) -> tuple[list[str], list[str], str]:
+async def _roles_and_permissions(
+    session: DbSession, user: User
+) -> tuple[list[str], list[str], str]:
     """Read the user's effective access from the database.
 
     Read at login rather than trusted from the token, so a role change takes
@@ -116,9 +117,9 @@ async def _roles_and_permissions(session: DbSession, user: User) -> tuple[list[s
     roles = list(
         (
             await session.execute(
-                select(Role).join(UserRoleLink, UserRoleLink.role_id == Role.id).where(
-                    UserRoleLink.user_id == user.id
-                )
+                select(Role)
+                .join(UserRoleLink, UserRoleLink.role_id == Role.id)
+                .where(UserRoleLink.user_id == user.id)
             )
         ).scalars()
     )
@@ -135,9 +136,9 @@ def _set_refresh_cookie(response: Response, token: str, days: int) -> None:
         REFRESH_COOKIE,
         token,
         max_age=days * 86400,
-        httponly=True,        # unreachable from JavaScript, so XSS cannot steal it
-        samesite="strict",    # not sent on cross-site requests
-        secure=False,         # set true behind TLS; a plant deployment terminates TLS at the proxy
+        httponly=True,  # unreachable from JavaScript, so XSS cannot steal it
+        samesite="strict",  # not sent on cross-site requests
+        secure=False,  # set true behind TLS; a plant deployment terminates TLS at the proxy
         path="/api/v1/auth",  # only ever sent to the endpoints that need it
     )
 
@@ -320,12 +321,18 @@ async def refresh_token(
     )
     _set_refresh_cookie(response, new_refresh, settings.refresh_token_days)
     await audit.log(
-        AuditAction.TOKEN_REFRESH, actor_user_id=user.id, actor_username=user.username,
+        AuditAction.TOKEN_REFRESH,
+        actor_user_id=user.id,
+        actor_username=user.username,
         session_id=rotated.id,
     )
     return TokenResponse(
-        access_token=token, expires_in=expires_in, username=user.username,
-        roles=roles, permissions=permissions, clearance=clearance,
+        access_token=token,
+        expires_in=expires_in,
+        username=user.username,
+        roles=roles,
+        permissions=permissions,
+        clearance=clearance,
     )
 
 
@@ -352,9 +359,7 @@ async def logout(
         ).scalar_one_or_none()
         if stored and stored.revoked_at is None:
             stored.revoked_at = now()
-            await audit.log(
-                AuditAction.LOGOUT, actor_user_id=stored.user_id, session_id=stored.id
-            )
+            await audit.log(AuditAction.LOGOUT, actor_user_id=stored.user_id, session_id=stored.id)
     response.delete_cookie(REFRESH_COOKIE, path="/api/v1/auth")
     return {"status": "logged out"}
 

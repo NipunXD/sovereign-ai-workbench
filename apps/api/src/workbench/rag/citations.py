@@ -46,6 +46,7 @@ def _marker_ids(body: str) -> list[str]:
             ids.append(token)
     return ids
 
+
 #: Snippet length in the citation popover. Long enough to confirm the claim,
 #: short enough not to become a way of reading a whole restricted document
 #: through citations.
@@ -164,12 +165,7 @@ class EvidenceItem:
             header += f" — {section}"
         if self.confidence < 0.8:
             header += f" — OCR confidence {self.confidence:.0%}"
-        return (
-            f"<source id=\"{self.chunk_id}\">\n"
-            f"{header}\n"
-            f"{self.text.strip()}\n"
-            f"</source>"
-        )
+        return f'<source id="{self.chunk_id}">\n{header}\n{self.text.strip()}\n</source>'
 
 
 def build_evidence_prompt(evidence: list[EvidenceItem]) -> str:

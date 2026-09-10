@@ -9,7 +9,6 @@ the same expectations are checked against actual models nightly.
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator
 
 import pytest
 
@@ -20,22 +19,27 @@ from workbench.providers.openai_compat import OpenAICompatProvider
 from workbench.providers.types import ChatMessage, GenerationRequest
 
 
-
 def _providers() -> list[pytest.param]:
     """The backends to test, plus the model each should be asked for."""
     cases = [pytest.param("mock", "mock-chat", id="mock")]
     if os.environ.get("OLLAMA_E2E"):
         cases.append(
-            pytest.param("ollama", os.environ.get("OLLAMA_E2E_MODEL", "qwen3.5:2b"),
-                         id="ollama", marks=pytest.mark.ollama)
+            pytest.param(
+                "ollama",
+                os.environ.get("OLLAMA_E2E_MODEL", "qwen3.5:2b"),
+                id="ollama",
+                marks=pytest.mark.ollama,
+            )
         )
         cases.append(
-            pytest.param("lmstudio", os.environ.get("LMSTUDIO_E2E_MODEL", "qwen/qwen3-4b"),
-                         id="lmstudio", marks=pytest.mark.ollama)
+            pytest.param(
+                "lmstudio",
+                os.environ.get("LMSTUDIO_E2E_MODEL", "qwen/qwen3-4b"),
+                id="lmstudio",
+                marks=pytest.mark.ollama,
+            )
         )
     return cases
-
-
 
 
 def _build(kind: str) -> LLMProvider:
@@ -159,7 +163,7 @@ async def test_embed_shape_is_consistent(kind: str, model: str) -> None:
         dims = {len(v) for v in vectors}
         assert len(dims) == 1, f"inconsistent embedding dimensions: {dims}"
         assert dims.pop() > 0
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         if kind == "mock":
             raise
         pytest.skip(f"{kind} embedding unavailable: {exc}")

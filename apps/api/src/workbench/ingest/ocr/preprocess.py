@@ -107,9 +107,7 @@ def preprocess(image: np.ndarray, options: PreprocessOptions | None = None) -> P
         )
         steps.append("adaptive threshold")
 
-    return PreprocessResult(
-        image=working, deskew_angle=angle, upscaled=scale, steps=tuple(steps)
-    )
+    return PreprocessResult(image=working, deskew_angle=angle, upscaled=scale, steps=tuple(steps))
 
 
 def normalise_angle(angle: float) -> float:
@@ -165,8 +163,11 @@ def rotate(image: np.ndarray, angle: float) -> np.ndarray:
     matrix[1, 2] += new_height / 2 - centre[1]
 
     return cv2.warpAffine(
-        image, matrix, (new_width, new_height),
-        flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE,
+        image,
+        matrix,
+        (new_width, new_height),
+        flags=cv2.INTER_CUBIC,
+        borderMode=cv2.BORDER_REPLICATE,
     )
 
 

@@ -35,7 +35,7 @@ class EventName:
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"
     #: Answer text. One per token-ish fragment.
-    TOKEN = "token"
+    TOKEN = "token"  # noqa: S105 — an SSE event name, not a credential
     #: The model's internal monologue, on a separate channel so it can never be
     #: mistaken for the answer.
     REASONING = "reasoning"

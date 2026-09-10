@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import shutil
 import tempfile
 import time
 from pathlib import Path
@@ -76,7 +75,7 @@ class DockerSandbox:
             if not images:
                 return False, f"image '{self.image}' is not built — run `make sandbox-image`"
             return True, "ready"
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             return False, f"{type(exc).__name__}: {exc}"
 
     async def execute(self, job: SandboxJob) -> SandboxResult:
@@ -160,14 +159,14 @@ class DockerSandbox:
                 detach=True,
                 name=f"{CONTAINER_PREFIX}{code_digest[:12]}-{int(time.time() * 1000)}",
                 # --- the isolation ---
-                network_mode="none",          # no interface at all, kernel-level
-                read_only=True,               # the image cannot be modified
-                user="65534:65534",           # nobody
+                network_mode="none",  # no interface at all, kernel-level
+                read_only=True,  # the image cannot be modified
+                user="65534:65534",  # nobody
                 cap_drop=["ALL"],
                 security_opt=["no-new-privileges:true"],
                 # /tmp is the one writable scratch area, and nothing there may
                 # be executed.
-                tmpfs={"/tmp": "rw,noexec,nosuid,size=64m"},
+                tmpfs={"/tmp": "rw,noexec,nosuid,size=64m"},  # noqa: S108 — in-container tmpfs
                 mounts=[
                     docker.types.Mount("/workspace/in", str(in_dir), type="bind", read_only=True),
                     docker.types.Mount("/workspace/out", str(out_dir), type="bind"),
@@ -178,13 +177,13 @@ class DockerSandbox:
                 memswap_limit=f"{job.memory_mb}m",
                 nano_cpus=int(job.cpus * 1e9),
                 pids_limit=128,
-                environment={"PYTHONHASHSEED": "0", "MPLBACKEND": "Agg", "HOME": "/tmp"},
+                environment={"PYTHONHASHSEED": "0", "MPLBACKEND": "Agg", "HOME": "/tmp"},  # noqa: S108
             )
 
             try:
                 wait_result = container.wait(timeout=job.timeout_s)
                 exit_code = int(wait_result.get("StatusCode", -1))
-            except Exception:  # noqa: BLE001 - requests timeout type varies by version
+            except Exception:
                 container.kill()
                 return SandboxResult(
                     status=SandboxStatus.TIMEOUT,
@@ -239,7 +238,7 @@ class DockerSandbox:
                 limits=self._limits(job),
             )
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.exception("sandbox_execution_failed", error=str(exc))
             return SandboxResult(
                 status=SandboxStatus.ERROR,
@@ -255,7 +254,7 @@ class DockerSandbox:
             if container is not None:
                 try:
                     container.remove(force=True)
-                except Exception:  # noqa: BLE001
+                except Exception:
                     log.warning("sandbox_container_remove_failed")
 
     @staticmethod
@@ -298,7 +297,7 @@ class DockerSandbox:
             containers = await asyncio.to_thread(
                 client.containers.list, all=True, filters={"name": CONTAINER_PREFIX}
             )
-        except Exception:  # noqa: BLE001
+        except Exception:
             return 0
 
         removed = 0
@@ -306,7 +305,10 @@ class DockerSandbox:
             try:
                 await asyncio.to_thread(container.remove, force=True)
                 removed += 1
-            except Exception:  # noqa: BLE001
+            except Exception as exc:
+                # One container refusing to die must not stop the sweep, but a
+                # container that never goes away is worth a line in the log.
+                log.debug("sandbox_orphan_reap_failed", container=container.id[:12], error=str(exc))
                 continue
         if removed:
             log.info("sandbox_orphans_reaped", count=removed)

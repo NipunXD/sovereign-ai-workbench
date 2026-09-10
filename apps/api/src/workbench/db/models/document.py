@@ -15,7 +15,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Column, Computed, Float, Index, Integer, String, Text, text as sa_text
+from sqlalchemy import Column, Computed, Float, Index, Integer, String, Text
+from sqlalchemy import text as sa_text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlmodel import Field, SQLModel
 
@@ -47,7 +48,7 @@ class Document(SQLModel, table=True):
     title: str = ""
     filename: str = ""
     mime: str = ""
-    doc_type: str = "unknown"        # sop | inspection | drawing | tabular | correspondence
+    doc_type: str = "unknown"  # sop | inspection | drawing | tabular | correspondence
     page_count: int = 0
     size_bytes: int = 0
 
@@ -64,7 +65,8 @@ class Document(SQLModel, table=True):
     blob_path: str = ""
     ir_path: str | None = None
     doc_metadata: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("metadata", JSONB, nullable=False, server_default="{}")
+        default_factory=dict,
+        sa_column=Column("metadata", JSONB, nullable=False, server_default="{}"),
     )
     extraction_report: dict[str, Any] = Field(
         default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
@@ -87,7 +89,9 @@ class DocumentPage(SQLModel, table=True):
     image_path: str | None = None
     #: Mean OCR confidence for the page. Surfaced in the viewer so a user can
     #: see when an answer rests on a poorly-scanned source.
-    mean_confidence: float = Field(default=1.0, sa_column=Column(Float, nullable=False, server_default=sa_text("1")))
+    mean_confidence: float = Field(
+        default=1.0, sa_column=Column(Float, nullable=False, server_default=sa_text("1"))
+    )
     ocr_engine: str | None = None
 
 
@@ -107,11 +111,19 @@ class DocumentBlock(SQLModel, table=True):
     block_id: str = ""
     type: str = "paragraph"
     text: str = Field(default="", sa_column=Column(Text, nullable=False, server_default=""))
-    bbox: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
-    confidence: float = Field(default=1.0, sa_column=Column(Float, nullable=False, server_default=sa_text("1")))
-    source: str = "native"           # native | ocr | vlm | office
-    ord: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default=sa_text("0")))
-    attrs: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
+    bbox: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
+    )
+    confidence: float = Field(
+        default=1.0, sa_column=Column(Float, nullable=False, server_default=sa_text("1"))
+    )
+    source: str = "native"  # native | ocr | vlm | office
+    ord: int = Field(
+        default=0, sa_column=Column(Integer, nullable=False, server_default=sa_text("0"))
+    )
+    attrs: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
+    )
 
 
 class Chunk(SQLModel, table=True):
@@ -131,15 +143,23 @@ class Chunk(SQLModel, table=True):
     id: str = Field(default_factory=lambda: prefixed_id("chunk"), primary_key=True)
     document_id: str = Field(foreign_key="documents.id", index=True)
     parent_id: str | None = Field(default=None)
-    ordinal: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default=sa_text("0")))
+    ordinal: int = Field(
+        default=0, sa_column=Column(Integer, nullable=False, server_default=sa_text("0"))
+    )
     text: str = Field(default="", sa_column=Column(Text, nullable=False, server_default=""))
     token_count: int = 0
 
     page_from: int = 1
     page_to: int = 1
-    bbox_union: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
-    block_ids: list[str] = Field(default_factory=list, sa_column=Column(JSONB, nullable=False, server_default="[]"))
-    section_path: list[str] = Field(default_factory=list, sa_column=Column(JSONB, nullable=False, server_default="[]"))
+    bbox_union: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
+    )
+    block_ids: list[str] = Field(
+        default_factory=list, sa_column=Column(JSONB, nullable=False, server_default="[]")
+    )
+    section_path: list[str] = Field(
+        default_factory=list, sa_column=Column(JSONB, nullable=False, server_default="[]")
+    )
 
     # Denormalised access-control columns — see the module docstring.
     classification: str = Classification.INTERNAL
@@ -150,7 +170,9 @@ class Chunk(SQLModel, table=True):
         default_factory=list, sa_column=Column(ARRAY(String()), nullable=False, server_default="{}")
     )
 
-    mean_confidence: float = Field(default=1.0, sa_column=Column(Float, nullable=False, server_default=sa_text("1")))
+    mean_confidence: float = Field(
+        default=1.0, sa_column=Column(Float, nullable=False, server_default=sa_text("1"))
+    )
     embedding_model: str = ""
     #: Point id in the vector store, so deletes stay in step across both stores.
     vector_id: str | None = Field(default=None, index=True)
@@ -179,7 +201,9 @@ class Dataset(SQLModel, table=True):
     document_id: str = Field(foreign_key="documents.id", index=True)
     sheet_name: str = ""
     row_count: int = 0
-    column_spec: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
+    column_spec: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
+    )
     duckdb_path: str = ""
 
 
@@ -190,8 +214,12 @@ class IngestionJob(SQLModel, table=True):
     document_id: str = Field(foreign_key="documents.id", index=True)
     status: str = "queued"
     stage: str = "receive"
-    progress: float = Field(default=0.0, sa_column=Column(Float, nullable=False, server_default=sa_text("0")))
-    stage_timings: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
+    progress: float = Field(
+        default=0.0, sa_column=Column(Float, nullable=False, server_default=sa_text("0"))
+    )
+    stage_timings: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
+    )
     error: str | None = None
     attempts: int = 0
     started_at: datetime | None = Field(default=None, sa_type=UTCDateTime)

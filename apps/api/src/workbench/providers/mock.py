@@ -19,7 +19,6 @@ Three behaviours make that work:
 from __future__ import annotations
 
 import asyncio
-import json
 import re
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -259,15 +258,16 @@ class MockProvider:
                 for index in range((dimensions * 4 // 32) + 1)
             )
             values = [
-                struct.unpack_from("<i", raw, offset * 4)[0] / 2**31
-                for offset in range(dimensions)
+                struct.unpack_from("<i", raw, offset * 4)[0] / 2**31 for offset in range(dimensions)
             ]
             norm = sum(value * value for value in values) ** 0.5 or 1.0
             vectors.append([value / norm for value in values])
         return vectors
 
     async def resident_models(self) -> list[ResidentModel]:
-        return [ResidentModel(physical_id=name, size_gb=size) for name, size in self._resident.items()]
+        return [
+            ResidentModel(physical_id=name, size_gb=size) for name, size in self._resident.items()
+        ]
 
     async def ensure_loaded(self, model: str) -> None:
         self._resident[model] = 1.0

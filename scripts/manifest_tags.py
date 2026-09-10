@@ -40,9 +40,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("manifest", type=Path)
     parser.add_argument("--all", action="store_true", help="include optional models")
-    parser.add_argument(
-        "--provider", help="only list models served by this provider", default=None
-    )
+    parser.add_argument("--provider", help="only list models served by this provider", default=None)
     args = parser.parse_args()
 
     if not args.manifest.is_file():

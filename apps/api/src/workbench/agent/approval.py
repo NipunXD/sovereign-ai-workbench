@@ -22,7 +22,6 @@ from datetime import timedelta
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from workbench.core.clock import now
 from workbench.core.hashing import digest
@@ -39,7 +38,7 @@ DEFAULT_EXPIRY_HOURS = 24
 
 @dataclass
 class ApprovalRequest:
-    kind: str            # "tool" | "artifact" | "final"
+    kind: str  # "tool" | "artifact" | "final"
     subject_type: str
     subject_id: str
     summary: dict[str, Any]

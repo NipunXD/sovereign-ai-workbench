@@ -30,12 +30,15 @@ QDRANT_URL = os.environ.get("WORKBENCH_QDRANT_URL", "http://localhost:6333")
 #: chunk_id, text, classification, departments
 CORPUS = [
     ("c_pub", "Depressurisation rate shall not exceed 2 bar per minute.", "public", []),
-    ("c_int", "Vessel V-1201 shell thickness measured 9.2 mm at CML-4.", "internal", ["inspection"]),
+    (
+        "c_int",
+        "Vessel V-1201 shell thickness measured 9.2 mm at CML-4.",
+        "internal",
+        ["inspection"],
+    ),
     ("c_con", "Turnaround budget for the CDU is 14.2 crore.", "confidential", ["finance"]),
     ("c_res", "Catalyst formulation ratio is 3:1 nickel to molybdenum.", "restricted", ["process"]),
 ]
-
-
 
 
 @pytest.fixture
@@ -49,7 +52,7 @@ async def store(manifest_path: Path) -> AsyncIterator[tuple[QdrantStore, Embedde
     vectors = QdrantStore(QDRANT_URL, collection)
     try:
         await vectors.ensure_collection(embedder.dimensions)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         pytest.skip(f"Qdrant unavailable at {QDRANT_URL}: {exc}")
 
     result = await embedder.embed([text for _, text, _, _ in CORPUS])
@@ -136,12 +139,16 @@ async def test_targeted_query_cannot_surface_a_restricted_chunk(
     where retrieve-then-filter would leak — the chunk would be found, scored,
     and only then withheld, which is observable.
     """
-    returned = await search_as(store, rbac, "viewer", "catalyst formulation nickel molybdenum ratio")
+    returned = await search_as(
+        store, rbac, "viewer", "catalyst formulation nickel molybdenum ratio"
+    )
     assert "c_res" not in returned
 
     # The same query as a cleared user must find it, or the test proves nothing
     # about filtering — only that retrieval is broken.
-    cleared = await search_as(store, rbac, "senior_engineer", "catalyst formulation nickel molybdenum ratio")
+    cleared = await search_as(
+        store, rbac, "senior_engineer", "catalyst formulation nickel molybdenum ratio"
+    )
     assert "c_res" in cleared
 
 

@@ -15,7 +15,6 @@ import time
 from typing import Any
 
 from sqlalchemy import text as sa_text
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from workbench.core.logging import get_logger
 from workbench.ingest.ir import BBox
@@ -107,7 +106,7 @@ class HybridRetriever:
     async def _dense(self, query: str, access: AccessFilter) -> list[dict[str, Any]]:
         try:
             vector = await self.embedder.embed_query(query)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.warning("dense_embed_failed", error=str(exc))
             return []
         if not vector:
@@ -116,7 +115,7 @@ class HybridRetriever:
             hits = await self.vector_store.search(
                 vector, limit=self.dense_k, access_filter=access.to_qdrant()
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             # Degrading to sparse-only beats failing the request outright.
             log.warning("dense_search_failed", error=str(exc))
             return []
@@ -141,12 +140,36 @@ class HybridRetriever:
         # Keep tags intact; split everything else on non-word characters.
         tags = re.findall(r"[A-Za-z]{1,4}-\d{1,5}[A-Za-z]?", query)
         remainder = re.sub(r"[A-Za-z]{1,4}-\d{1,5}[A-Za-z]?", " ", query)
-        words = [w for w in re.findall(r"[A-Za-z0-9]{3,}", remainder)]
+        words = re.findall(r"[A-Za-z0-9]{3,}", remainder)
 
         stop = {
-            "the", "and", "for", "what", "which", "with", "from", "that", "this",
-            "are", "was", "were", "has", "have", "does", "did", "how", "why",
-            "when", "where", "who", "whom", "into", "onto", "about", "any", "all",
+            "the",
+            "and",
+            "for",
+            "what",
+            "which",
+            "with",
+            "from",
+            "that",
+            "this",
+            "are",
+            "was",
+            "were",
+            "has",
+            "have",
+            "does",
+            "did",
+            "how",
+            "why",
+            "when",
+            "where",
+            "who",
+            "whom",
+            "into",
+            "onto",
+            "about",
+            "any",
+            "all",
         }
         terms = [*tags, *(w for w in words if w.lower() not in stop)]
         if not terms:
@@ -192,18 +215,22 @@ class HybridRetriever:
         try:
             async with self.session_factory() as session:  # type: AsyncSession
                 rows = (
-                    await session.execute(
-                        sql,
-                        {
-                            "q": tsquery,
-                            "classifications": principal.visible_classifications,
-                            "departments": sorted(principal.departments) or [""],
-                            "no_department_filter": not principal.departments,
-                            "limit": self.sparse_k,
-                        },
+                    (
+                        await session.execute(
+                            sql,
+                            {
+                                "q": tsquery,
+                                "classifications": principal.visible_classifications,
+                                "departments": sorted(principal.departments) or [""],
+                                "no_department_filter": not principal.departments,
+                                "limit": self.sparse_k,
+                            },
+                        )
                     )
-                ).mappings().all()
-        except Exception as exc:  # noqa: BLE001
+                    .mappings()
+                    .all()
+                )
+        except Exception as exc:
             log.warning("sparse_search_failed", error=str(exc))
             return []
 

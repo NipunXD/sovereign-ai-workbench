@@ -47,10 +47,10 @@ class BlockType(StrEnum):
 class BlockSource(StrEnum):
     """How the text was obtained. Drives confidence and the citation badge."""
 
-    NATIVE = "native"   # embedded PDF text layer — exact
-    OFFICE = "office"   # docx/pptx/xlsx object model — exact
-    OCR = "ocr"         # rasterised and recognised — approximate
-    VLM = "vlm"         # read by a vision model — approximate, unordered
+    NATIVE = "native"  # embedded PDF text layer — exact
+    OFFICE = "office"  # docx/pptx/xlsx object model — exact
+    OCR = "ocr"  # rasterised and recognised — approximate
+    VLM = "vlm"  # read by a vision model — approximate, unordered
 
 
 class BBox(BaseModel):
@@ -78,7 +78,9 @@ class BBox(BaseModel):
         return self
 
     @classmethod
-    def from_pixels(cls, rect: tuple[float, float, float, float], width: float, height: float) -> BBox:
+    def from_pixels(
+        cls, rect: tuple[float, float, float, float], width: float, height: float
+    ) -> BBox:
         """Normalise a pixel rectangle against its page dimensions."""
         if width <= 0 or height <= 0:
             return cls()

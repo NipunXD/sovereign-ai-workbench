@@ -11,7 +11,7 @@ the person reviewing access would need the clearance of everything they review.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
@@ -22,7 +22,7 @@ from sqlalchemy import func, select
 from workbench.api.deps import Audit, DbSession, require_permission
 from workbench.core.clock import now
 from workbench.core.hashing import canonical_json
-from workbench.db.models import AuditAction, AuditEvent
+from workbench.db.models import AuditEvent
 from workbench.security.audit import verify_chain
 from workbench.security.rbac import Principal
 
@@ -126,9 +126,7 @@ async def list_events(
 
     events = list(
         (
-            await session.execute(
-                query.order_by(AuditEvent.seq.desc()).limit(limit).offset(offset)
-            )
+            await session.execute(query.order_by(AuditEvent.seq.desc()).limit(limit).offset(offset))
         ).scalars()
     )
 

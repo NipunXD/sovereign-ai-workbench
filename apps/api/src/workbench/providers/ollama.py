@@ -79,7 +79,7 @@ class OllamaProvider:
                 latency_ms=int((time.perf_counter() - started) * 1000),
                 models_available=len(models),
             )
-        except Exception as exc:  # noqa: BLE001 - health must never raise
+        except Exception as exc:
             return ProviderHealth(
                 provider=self.name,
                 healthy=False,
@@ -238,9 +238,7 @@ class OllamaProvider:
         if not texts:
             return []
         try:
-            response = await self._client.post(
-                "/api/embed", json={"model": model, "input": texts}
-            )
+            response = await self._client.post("/api/embed", json={"model": model, "input": texts})
         except httpx.TimeoutException as exc:
             raise ProviderTimeoutError("ollama timed out embedding") from exc
         except httpx.HTTPError as exc:

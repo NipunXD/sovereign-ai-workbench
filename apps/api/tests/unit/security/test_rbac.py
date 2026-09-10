@@ -15,6 +15,7 @@ from workbench.core.classification import Classification
 from workbench.core.errors import AuthorizationError
 from workbench.security.rbac import AccessFilter, Principal, RbacConfig
 
+
 @pytest.fixture
 def rbac(rbac_config_path: Path) -> RbacConfig:
     return RbacConfig.load(rbac_config_path)

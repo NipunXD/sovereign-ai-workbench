@@ -13,7 +13,6 @@ would otherwise change on every run.
 from __future__ import annotations
 
 import io
-from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -55,7 +54,7 @@ class DocxBuilder:
     def build(self, spec: DocxSpec, provenance: Provenance) -> ArtifactBytes:
         from docx import Document
         from docx.enum.text import WD_ALIGN_PARAGRAPH
-        from docx.shared import Inches, Pt, RGBColor
+        from docx.shared import Pt, RGBColor
 
         document = Document()
 
@@ -127,9 +126,7 @@ class DocxBuilder:
                         for paragraph in cells[position].paragraphs:
                             for run in paragraph.runs:
                                 run.bold = True
-            table.rows[0]._tr.get_or_add_trPr().append(
-                _repeat_header_row()
-            )
+            table.rows[0]._tr.get_or_add_trPr().append(_repeat_header_row())
             if block.caption:
                 caption = document.add_paragraph(block.caption)
                 caption.runs[0].font.size = Pt(8)
@@ -185,8 +182,7 @@ class DocxBuilder:
                 paragraph.runs[0].font.size = Pt(9)
         else:
             paragraph = document.add_paragraph(
-                "No documents were cited. This content was not grounded in the "
-                "indexed corpus."
+                "No documents were cited. This content was not grounded in the indexed corpus."
             )
             paragraph.runs[0].font.size = Pt(9)
             paragraph.runs[0].bold = True
@@ -204,8 +200,8 @@ def _repeat_header_row() -> Any:
 
     python-docx has no API for this; it is a single OOXML element.
     """
-    from docx.oxml.ns import qn
     from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
 
     header = OxmlElement("w:tblHeader")
     header.set(qn("w:val"), "true")

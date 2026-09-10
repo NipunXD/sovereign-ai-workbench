@@ -77,10 +77,11 @@ def test_no_eligible_candidate_raises_with_reasons() -> None:
 
 def test_context_window_too_small_is_rejected() -> None:
     policy = SelectionPolicy()
-    candidates = [make_model("small", context_window=4096), make_model("big", context_window=131072)]
-    selection = policy.select(
-        candidates, SelectionRequirements(min_context_window=40000)
-    )
+    candidates = [
+        make_model("small", context_window=4096),
+        make_model("big", context_window=131072),
+    ]
+    selection = policy.select(candidates, SelectionRequirements(min_context_window=40000))
     assert selection.model.logical_name == "big"
 
 
@@ -114,9 +115,7 @@ def test_excluded_models_are_skipped_on_retry() -> None:
     """A model that just failed must not be retried within the same request."""
     policy = SelectionPolicy()
     candidates = [make_model("first"), make_model("second", quality_tier=3)]
-    selection = policy.select(
-        candidates, SelectionRequirements(), exclude=frozenset({"first"})
-    )
+    selection = policy.select(candidates, SelectionRequirements(), exclude=frozenset({"first"}))
     assert selection.model.logical_name == "second"
 
 

@@ -9,7 +9,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Column, Float, Index, Integer, Text, text as sa_text
+from sqlalchemy import Column, Float, Index, Integer, Text
+from sqlalchemy import text as sa_text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
@@ -59,14 +60,20 @@ class Artifact(SQLModel, table=True):
     size_bytes: int = 0
     storage_path: str = ""
 
-    spec: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
+    spec: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
+    )
     #: Models used, source documents with page numbers, retrieval settings,
     #: approver and timestamps. Rendered into the document itself as well, so
     #: the provenance travels with the file once it leaves the system.
-    provenance: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
+    provenance: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
+    )
 
     status: str = Field(default=ArtifactStatus.DRAFT, index=True)
-    version: int = Field(default=1, sa_column=Column(Integer, nullable=False, server_default=sa_text("1")))
+    version: int = Field(
+        default=1, sa_column=Column(Integer, nullable=False, server_default=sa_text("1"))
+    )
     supersedes_id: str | None = None
     created_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
 
@@ -85,13 +92,15 @@ class Approval(SQLModel, table=True):
     id: str = Field(default_factory=lambda: prefixed_id("approval"), primary_key=True)
     run_id: str | None = Field(default=None, index=True)
     step_id: str | None = None
-    kind: str = "artifact"           # tool | artifact | final
+    kind: str = "artifact"  # tool | artifact | final
     subject_type: str = ""
     subject_id: str = ""
 
     requested_by: str | None = Field(default=None, foreign_key="users.id")
     requested_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
-    payload_summary: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
+    payload_summary: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
+    )
     payload_digest: str | None = Field(default=None, max_length=64)
 
     status: str = Field(default=ApprovalStatus.PENDING, index=True)
@@ -115,12 +124,20 @@ class SandboxExecution(SQLModel, table=True):
     step_id: str | None = None
     code_digest: str = Field(default="", max_length=64)
     image_digest: str = ""
-    limits: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
+    limits: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
+    )
     exit_code: int | None = None
     status: str = SandboxStatus.OK
-    stdout_truncated: str = Field(default="", sa_column=Column(Text, nullable=False, server_default=""))
-    stderr_truncated: str = Field(default="", sa_column=Column(Text, nullable=False, server_default=""))
-    output_files: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSONB, nullable=False, server_default="[]"))
+    stdout_truncated: str = Field(
+        default="", sa_column=Column(Text, nullable=False, server_default="")
+    )
+    stderr_truncated: str = Field(
+        default="", sa_column=Column(Text, nullable=False, server_default="")
+    )
+    output_files: list[dict[str, Any]] = Field(
+        default_factory=list, sa_column=Column(JSONB, nullable=False, server_default="[]")
+    )
     duration_ms: int | None = None
     created_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
 
@@ -131,8 +148,12 @@ class EvalRun(SQLModel, table=True):
     id: str = Field(default_factory=lambda: prefixed_id("eval"), primary_key=True)
     suite: str = Field(index=True)
     git_sha: str | None = None
-    config: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
-    summary: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
+    config: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
+    )
+    summary: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
+    )
     started_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
     finished_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
 
@@ -145,9 +166,13 @@ class EvalResult(SQLModel, table=True):
     eval_run_id: str = Field(foreign_key="eval_runs.id", index=True)
     case_id: str = ""
     metric: str = ""
-    value: float = Field(default=0.0, sa_column=Column(Float, nullable=False, server_default=sa_text("0")))
+    value: float = Field(
+        default=0.0, sa_column=Column(Float, nullable=False, server_default=sa_text("0"))
+    )
     passed: bool = True
-    details: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
+    details: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
+    )
 
 
 class Setting(SQLModel, table=True):
@@ -156,6 +181,8 @@ class Setting(SQLModel, table=True):
     __tablename__ = "settings"
 
     key: str = Field(primary_key=True)
-    value: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
+    value: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
+    )
     updated_by: str | None = None
     updated_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)

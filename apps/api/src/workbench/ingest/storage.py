@@ -72,9 +72,7 @@ class BlobStore:
                     temp_path.unlink(missing_ok=True)
                     from workbench.core.errors import PayloadTooLargeError
 
-                    raise PayloadTooLargeError(
-                        f"upload exceeds the {max_bytes / 1e6:.0f} MB limit"
-                    )
+                    raise PayloadTooLargeError(f"upload exceeds the {max_bytes / 1e6:.0f} MB limit")
                 hasher.update(chunk)
                 temp.write(chunk)
 

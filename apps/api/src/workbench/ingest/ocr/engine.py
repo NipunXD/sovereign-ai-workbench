@@ -128,9 +128,11 @@ class RapidOcrEngine:
         started = time.perf_counter()
         try:
             raw, _ = self._lazy()(image)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.warning("ocr_failed", engine=self.name, error=str(exc))
-            return OcrResult(engine=self.name, duration_ms=int((time.perf_counter() - started) * 1000))
+            return OcrResult(
+                engine=self.name, duration_ms=int((time.perf_counter() - started) * 1000)
+            )
 
         height, width = image.shape[:2]
         lines: list[OcrLine] = []
@@ -200,7 +202,8 @@ class TesseractEngine:
                 )
             )
         return OcrResult(
-            lines=lines, engine=self.name,
+            lines=lines,
+            engine=self.name,
             duration_ms=int((time.perf_counter() - started) * 1000),
         )
 

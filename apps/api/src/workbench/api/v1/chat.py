@@ -115,13 +115,16 @@ async def chat_stream(
                         approved_in_run = True
                 elif event.name == EventName.ARTIFACT_CREATED:
                     await _persist_artifact(
-                        event.data, run_id=run_id, conversation_id=conversation_id,
-                        principal=principal, approved=approved_in_run,
+                        event.data,
+                        run_id=run_id,
+                        conversation_id=conversation_id,
+                        principal=principal,
+                        approved=approved_in_run,
                     )
                 elif event.name == EventName.RUN_FINISHED:
                     status = event.data.get("status", "succeeded")
                 yield format_sse(event.name, event.data, seq=seq)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.exception("chat_stream_failed", run_id=run_id, error=str(exc))
             status = "failed"
             seq += 1
@@ -144,7 +147,7 @@ async def chat_stream(
                     metadata={"status": status, "citations": len(citations)},
                 )
                 await session.commit()
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 # Failing to write the closing audit record must not corrupt the
                 # response the user already received.
                 log.error("run_finish_audit_failed", run_id=run_id, error=str(exc))
@@ -217,5 +220,5 @@ async def _persist_artifact(
                     ),
                 )
             )
-    except Exception as exc:  # noqa: BLE001 - must not break the response stream
+    except Exception as exc:
         log.error("artifact_persist_failed", sha256=sha256[:12], error=str(exc))

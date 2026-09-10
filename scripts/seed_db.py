@@ -40,12 +40,12 @@ log = get_logger("seed")
 #: separation-of-duties boundary so the approval gate can be demonstrated with
 #: two browsers rather than described.
 DEMO_USERS: dict[str, tuple[str, list[str], list[str]]] = {
-    "admin":     ("Platform Administrator", ["admin"], []),
-    "engineer":  ("R. Krishnan (Inspection)", ["engineer"], ["inspection"]),
-    "senior":    ("S. Nair (Senior Inspection)", ["senior_engineer"], ["inspection", "process"]),
-    "approver":  ("M. Devadiga (Maintenance Head)", ["approver"], ["inspection", "maintenance"]),
-    "auditor":   ("Internal Audit", ["auditor"], []),
-    "viewer":    ("Plant Operator", ["viewer"], ["operations"]),
+    "admin": ("Platform Administrator", ["admin"], []),
+    "engineer": ("R. Krishnan (Inspection)", ["engineer"], ["inspection"]),
+    "senior": ("S. Nair (Senior Inspection)", ["senior_engineer"], ["inspection", "process"]),
+    "approver": ("M. Devadiga (Maintenance Head)", ["approver"], ["inspection", "maintenance"]),
+    "auditor": ("Internal Audit", ["auditor"], []),
+    "viewer": ("Plant Operator", ["viewer"], ["operations"]),
 }
 
 
@@ -104,15 +104,11 @@ async def seed() -> None:
             for code in sorted(granted):
                 permission = permissions_by_code.get(code)
                 if permission is not None and permission.id not in existing_links:
-                    session.add(
-                        RolePermissionLink(role_id=role.id, permission_id=permission.id)
-                    )
+                    session.add(RolePermissionLink(role_id=role.id, permission_id=permission.id))
         await session.flush()
 
         # --- users ---
-        existing_users = {
-            u.username: u for u in (await session.execute(select(User))).scalars()
-        }
+        existing_users = {u.username: u for u in (await session.execute(select(User))).scalars()}
         created = []
         for username, (full_name, role_names, departments) in DEMO_USERS.items():
             if username in existing_users:
@@ -146,7 +142,9 @@ async def seed() -> None:
     print("-" * 72)
     for username, (_, roles, departments) in DEMO_USERS.items():
         clearance = rbac.clearance_for(set(roles))
-        print(f"{username:<12} {clearance:<14} {','.join(roles):<18} {','.join(departments) or '-'}")
+        print(
+            f"{username:<12} {clearance:<14} {','.join(roles):<18} {','.join(departments) or '-'}"
+        )
 
 
 if __name__ == "__main__":

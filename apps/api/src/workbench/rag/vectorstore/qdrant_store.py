@@ -63,8 +63,10 @@ class QdrantStore:
             log.info("qdrant_collection_created", collection=self.collection, dimensions=dimensions)
         except RetrievalError:
             raise
-        except Exception as exc:  # noqa: BLE001
-            raise RetrievalError(f"could not prepare collection '{self.collection}': {exc}") from exc
+        except Exception as exc:
+            raise RetrievalError(
+                f"could not prepare collection '{self.collection}': {exc}"
+            ) from exc
 
     async def upsert(self, points: list[VectorPoint]) -> int:
         if not points:
@@ -80,7 +82,7 @@ class QdrantStore:
                 ],
                 wait=True,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise RetrievalError(f"vector upsert failed: {exc}") from exc
         return len(points)
 
@@ -100,7 +102,7 @@ class QdrantStore:
                 query_filter=self._to_filter(access_filter),
                 with_payload=True,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise RetrievalError(f"vector search failed: {exc}") from exc
 
         return [
@@ -128,7 +130,7 @@ class QdrantStore:
                 ),
                 wait=True,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise RetrievalError(f"vector delete failed: {exc}") from exc
         return 1
 
@@ -136,7 +138,7 @@ class QdrantStore:
         try:
             result = await self._client.count(self.collection, exact=True)
             return int(result.count)
-        except Exception:  # noqa: BLE001
+        except Exception:
             return 0
 
     async def snapshot(self, path: str) -> str:
@@ -144,7 +146,7 @@ class QdrantStore:
         try:
             info = await self._client.create_snapshot(collection_name=self.collection)
             return str(getattr(info, "name", path))
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise RetrievalError(f"snapshot failed: {exc}") from exc
 
     async def aclose(self) -> None:

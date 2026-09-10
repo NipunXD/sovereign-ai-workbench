@@ -90,13 +90,14 @@ class Provenance:
             ("Run", self.run_id or "—"),
         ]
         if self.models:
-            rows.append(
-                ("Models", ", ".join(f"{k} → {v}" for k, v in sorted(self.models.items())))
-            )
+            rows.append(("Models", ", ".join(f"{k} → {v}" for k, v in sorted(self.models.items()))))
         if self.tools_used:
             rows.append(("Tools", ", ".join(sorted(set(self.tools_used)))))
         rows.append(
-            ("Approved by", f"{self.approved_by} on {self.approved_at}" if self.approved_by else "not approved")
+            (
+                "Approved by",
+                f"{self.approved_by} on {self.approved_at}" if self.approved_by else "not approved",
+            )
         )
         if self.sha256:
             rows.append(("Document digest", self.sha256))
@@ -113,7 +114,9 @@ class Provenance:
                     f"  [text recognised from a scan at "
                     f"{source['lowest_confidence']:.0%} confidence — verify against the original]"
                 )
-            lines.append(f"{source['title']} — page{'s' if len(source['pages']) > 1 else ''} {pages}{suffix}")
+            lines.append(
+                f"{source['title']} — page{'s' if len(source['pages']) > 1 else ''} {pages}{suffix}"
+            )
         return lines
 
     def as_dict(self) -> dict[str, Any]:
@@ -126,9 +129,7 @@ class Provenance:
             "approved_by": self.approved_by,
             "approved_at": self.approved_at,
             "sha256": self.sha256,
-            "sources": [
-                {**source, "pages": list(source["pages"])} for source in self.sources
-            ],
+            "sources": [{**source, "pages": list(source["pages"])} for source in self.sources],
             "has_uncertain_sources": self.has_uncertain_sources,
             "notes": self.notes,
         }

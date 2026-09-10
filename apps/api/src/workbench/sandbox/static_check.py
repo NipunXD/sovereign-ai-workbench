@@ -20,11 +20,35 @@ from dataclasses import dataclass, field
 #: one; the rest are ways to escape the interpreter or start another process.
 FORBIDDEN_MODULES: frozenset[str] = frozenset(
     {
-        "socket", "ssl", "http", "urllib", "urllib2", "urllib3", "requests",
-        "httpx", "aiohttp", "ftplib", "smtplib", "poplib", "imaplib",
-        "telnetlib", "xmlrpc", "asyncio", "subprocess", "multiprocessing",
-        "ctypes", "cffi", "pty", "signal", "socketserver", "webbrowser",
-        "importlib", "pkgutil", "runpy", "gc", "atexit",
+        "socket",
+        "ssl",
+        "http",
+        "urllib",
+        "urllib2",
+        "urllib3",
+        "requests",
+        "httpx",
+        "aiohttp",
+        "ftplib",
+        "smtplib",
+        "poplib",
+        "imaplib",
+        "telnetlib",
+        "xmlrpc",
+        "asyncio",
+        "subprocess",
+        "multiprocessing",
+        "ctypes",
+        "cffi",
+        "pty",
+        "signal",
+        "socketserver",
+        "webbrowser",
+        "importlib",
+        "pkgutil",
+        "runpy",
+        "gc",
+        "atexit",
     }
 )
 
@@ -37,8 +61,19 @@ FORBIDDEN_BUILTINS: frozenset[str] = frozenset(
 #: that start processes or alter the environment.
 FORBIDDEN_ATTRIBUTES: frozenset[str] = frozenset(
     {
-        "system", "popen", "spawn", "spawnl", "spawnv", "execv", "execve",
-        "execl", "fork", "forkpty", "kill", "setuid", "setgid",
+        "system",
+        "popen",
+        "spawn",
+        "spawnl",
+        "spawnv",
+        "execv",
+        "execve",
+        "execl",
+        "fork",
+        "forkpty",
+        "kill",
+        "setuid",
+        "setgid",
     }
 )
 
@@ -85,9 +120,7 @@ class _Inspector(ast.NodeVisitor):
 
     def visit_Call(self, node: ast.Call) -> None:
         if isinstance(node.func, ast.Name) and node.func.id in FORBIDDEN_BUILTINS:
-            self.violations.append(
-                f"line {node.lineno}: calling {node.func.id}() is not permitted"
-            )
+            self.violations.append(f"line {node.lineno}: calling {node.func.id}() is not permitted")
         if isinstance(node.func, ast.Attribute) and node.func.attr in FORBIDDEN_ATTRIBUTES:
             self.violations.append(
                 f"line {node.lineno}: calling .{node.func.attr}() is not permitted"
@@ -97,11 +130,19 @@ class _Inspector(ast.NodeVisitor):
     def visit_Attribute(self, node: ast.Attribute) -> None:
         # Attribute chains through dunders are the classic route out of a
         # restricted namespace: ().__class__.__bases__[0].__subclasses__().
-        if node.attr.startswith("__") and node.attr.endswith("__"):
-            if node.attr not in {"__name__", "__doc__", "__file__", "__dict__", "__len__"}:
-                self.violations.append(
-                    f"line {node.lineno}: accessing '{node.attr}' is not permitted"
-                )
+        if (
+            node.attr.startswith("__")
+            and node.attr.endswith("__")
+            and node.attr
+            not in {
+                "__name__",
+                "__doc__",
+                "__file__",
+                "__dict__",
+                "__len__",
+            }
+        ):
+            self.violations.append(f"line {node.lineno}: accessing '{node.attr}' is not permitted")
         self.generic_visit(node)
 
 

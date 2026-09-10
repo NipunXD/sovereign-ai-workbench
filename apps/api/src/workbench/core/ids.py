@@ -39,7 +39,7 @@ _PREFIXES: Final[dict[str, str]] = {
 
 def set_deterministic(enabled: bool) -> None:
     """Switch ID generation between random and reproducible."""
-    global _deterministic, _counter  # noqa: PLW0603
+    global _deterministic, _counter
     _deterministic = enabled
     _counter = itertools.count(1)
 

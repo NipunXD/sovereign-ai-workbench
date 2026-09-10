@@ -12,7 +12,7 @@ separate "write me a script" from "what does the manual say".
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from workbench.core.hashing import digest

@@ -77,8 +77,7 @@ class PdfExtractor:
 
         if scanned_pages:
             warnings.append(
-                f"{scanned_pages} of {len(pages)} pages have no usable text layer "
-                f"and require OCR"
+                f"{scanned_pages} of {len(pages)} pages have no usable text layer and require OCR"
             )
 
         report = ExtractionReport(
@@ -146,7 +145,10 @@ class PdfExtractor:
             for span in line.get("spans", [])
         )
 
-        if word_count < MIN_WORDS_FOR_NATIVE or self._image_coverage(raw, width, height) > IMAGE_COVERAGE_SCANNED:
+        if (
+            word_count < MIN_WORDS_FOR_NATIVE
+            or self._image_coverage(raw, width, height) > IMAGE_COVERAGE_SCANNED
+        ):
             # Leave the page empty. The OCR stage recognises pages with no
             # blocks and fills them in; emitting a handful of junk characters
             # here would suppress that and leave the page unsearchable.

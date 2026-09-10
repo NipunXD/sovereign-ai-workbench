@@ -225,10 +225,7 @@ class SelectionPolicy:
                 required_capabilities=sorted(c.value for c in requirements.capabilities),
             )
 
-        scored = [
-            (self._score(info, residency), info)
-            for info in eligible
-        ]
+        scored = [(self._score(info, residency), info) for info in eligible]
         scored.sort(key=lambda pair: pair[0], reverse=True)
         best_score, best = scored[0]
 

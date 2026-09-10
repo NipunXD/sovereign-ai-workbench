@@ -10,7 +10,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Column, Float, Index, Integer, Text, text as sa_text
+from sqlalchemy import Column, Float, Index, Integer, Text
+from sqlalchemy import text as sa_text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
@@ -35,7 +36,9 @@ class Conversation(SQLModel, table=True):
     id: str = Field(default_factory=lambda: prefixed_id("conversation"), primary_key=True)
     user_id: str = Field(foreign_key="users.id", index=True)
     title: str = "New conversation"
-    settings: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
+    settings: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
+    )
     created_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
     updated_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
     archived_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
@@ -77,12 +80,20 @@ class MessageCitation(SQLModel, table=True):
     doc_id: str = ""
     doc_title: str = ""
     page_no: int = 1
-    bbox: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
+    bbox: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
+    )
     snippet: str = Field(default="", sa_column=Column(Text, nullable=False, server_default=""))
-    section_path: list[str] = Field(default_factory=list, sa_column=Column(JSONB, nullable=False, server_default="[]"))
-    score: float = Field(default=0.0, sa_column=Column(Float, nullable=False, server_default=sa_text("0")))
+    section_path: list[str] = Field(
+        default_factory=list, sa_column=Column(JSONB, nullable=False, server_default="[]")
+    )
+    score: float = Field(
+        default=0.0, sa_column=Column(Float, nullable=False, server_default=sa_text("0"))
+    )
     retrieval_method: str = "hybrid"
-    confidence: float = Field(default=1.0, sa_column=Column(Float, nullable=False, server_default=sa_text("1")))
+    confidence: float = Field(
+        default=1.0, sa_column=Column(Float, nullable=False, server_default=sa_text("1"))
+    )
 
 
 class AgentRun(SQLModel, table=True):
@@ -98,9 +109,15 @@ class AgentRun(SQLModel, table=True):
     status: str = Field(default=RunStatus.QUEUED, index=True)
     input: str = Field(default="", sa_column=Column(Text, nullable=False, server_default=""))
     final_message_id: str | None = None
-    plan: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
-    budget: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
-    validation: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
+    plan: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
+    )
+    budget: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
+    )
+    validation: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
+    )
     error: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
     started_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
     finished_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
@@ -115,7 +132,9 @@ class AgentStep(SQLModel, table=True):
 
     id: str = Field(default_factory=lambda: prefixed_id("step"), primary_key=True)
     run_id: str = Field(foreign_key="agent_runs.id", index=True)
-    seq: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default=sa_text("0")))
+    seq: int = Field(
+        default=0, sa_column=Column(Integer, nullable=False, server_default=sa_text("0"))
+    )
     node: str = ""
     status: str = "running"
     input_digest: str | None = Field(default=None, max_length=64)
@@ -123,7 +142,9 @@ class AgentStep(SQLModel, table=True):
     model_used: str | None = None
     lane: str | None = None
     latency_ms: int | None = None
-    payload: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
+    payload: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
+    )
     started_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
     finished_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
 
@@ -140,15 +161,23 @@ class RoutingDecision(SQLModel, table=True):
     lane: str = ""
     #: 0 deterministic, 1 lexical, 2 classifier. The distribution of this column
     #: is the headline number for whether the cascade is earning its keep.
-    stage_decided: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default=sa_text("0")))
+    stage_decided: int = Field(
+        default=0, sa_column=Column(Integer, nullable=False, server_default=sa_text("0"))
+    )
     chosen_model: str = ""
     physical_model: str = ""
     provider: str = ""
-    alternatives: list[str] = Field(default_factory=list, sa_column=Column(JSONB, nullable=False, server_default="[]"))
-    confidence: float = Field(default=0.0, sa_column=Column(Float, nullable=False, server_default=sa_text("0")))
+    alternatives: list[str] = Field(
+        default_factory=list, sa_column=Column(JSONB, nullable=False, server_default="[]")
+    )
+    confidence: float = Field(
+        default=0.0, sa_column=Column(Float, nullable=False, server_default=sa_text("0"))
+    )
     reason: str = ""
     features_digest: str | None = Field(default=None, max_length=64)
-    decide_latency_ms: float = Field(default=0.0, sa_column=Column(Float, nullable=False, server_default=sa_text("0")))
+    decide_latency_ms: float = Field(
+        default=0.0, sa_column=Column(Float, nullable=False, server_default=sa_text("0"))
+    )
     swap_required: bool = False
     swap_latency_ms: float | None = None
     created_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
@@ -156,7 +185,10 @@ class RoutingDecision(SQLModel, table=True):
 
 class ToolInvocation(SQLModel, table=True):
     __tablename__ = "tool_invocations"
-    __table_args__ = (Index("ix_tools_run", "run_id"), Index("ix_tools_name_created", "tool_name", "created_at"))
+    __table_args__ = (
+        Index("ix_tools_run", "run_id"),
+        Index("ix_tools_name_created", "tool_name", "created_at"),
+    )
 
     id: str = Field(default_factory=lambda: prefixed_id("tinv"), primary_key=True)
     run_id: str | None = Field(default=None, index=True)
@@ -164,7 +196,9 @@ class ToolInvocation(SQLModel, table=True):
     tool_name: str = ""
     tool_version: str = "1.0.0"
     args_digest: str | None = Field(default=None, max_length=64)
-    args: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
+    args: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
+    )
     result_digest: str | None = Field(default=None, max_length=64)
     ok: bool = True
     error: str | None = None

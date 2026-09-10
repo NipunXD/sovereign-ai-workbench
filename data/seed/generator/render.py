@@ -26,19 +26,18 @@ PAGE_WIDTH, PAGE_HEIGHT = 595, 842  # A4 in points
 
 def render_pdf(document: SeedDocument, target: Path) -> None:
     """Lay out a document as a native PDF."""
+    from reportlab.lib import colors
     from reportlab.lib.enums import TA_JUSTIFY
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import mm
     from reportlab.platypus import (
-        PageBreak,
         Paragraph,
         SimpleDocTemplate,
         Spacer,
         Table,
         TableStyle,
     )
-    from reportlab.lib import colors
 
     target.parent.mkdir(parents=True, exist_ok=True)
     styles = getSampleStyleSheet()
@@ -66,21 +65,27 @@ def render_pdf(document: SeedDocument, target: Path) -> None:
         if section.table:
             table = Table(section.table, hAlign="LEFT")
             table.setStyle(
-                TableStyle([
-                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                    ("FONTSIZE", (0, 0), (-1, -1), 8),
-                    ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8e8e8")),
-                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ])
+                TableStyle(
+                    [
+                        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                        ("FONTSIZE", (0, 0), (-1, -1), 8),
+                        ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
+                        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8e8e8")),
+                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ]
+                )
             )
             story.extend([Spacer(1, 4), table, Spacer(1, 6)])
 
     SimpleDocTemplate(
-        str(target), pagesize=A4,
-        topMargin=20 * mm, bottomMargin=20 * mm,
-        leftMargin=20 * mm, rightMargin=20 * mm,
-        title=document.title, author="MRPL",
+        str(target),
+        pagesize=A4,
+        topMargin=20 * mm,
+        bottomMargin=20 * mm,
+        leftMargin=20 * mm,
+        rightMargin=20 * mm,
+        title=document.title,
+        author="MRPL",
     ).build(story, onFirstPage=header_footer, onLaterPages=header_footer)
 
 
@@ -116,9 +121,8 @@ def render_tag_registry(target: Path) -> list[str]:
 
 def render_thickness_workbook(target: Path) -> None:
     """Thickness history as a spreadsheet, for the table-query path."""
-    from openpyxl import Workbook
-
     from content import THICKNESS_TABLE
+    from openpyxl import Workbook
 
     workbook = Workbook()
     sheet = workbook.active
@@ -156,8 +160,16 @@ def render_pid(target: Path, tags: list[str]) -> dict[str, list[float]]:
         truth[text] = [x / width, (y - th) / height, (x + tw) / width, y / height]
 
     cv2.rectangle(canvas, (40, 40), (width - 40, height - 40), black, 3)
-    cv2.putText(canvas, "MRPL  CRUDE DISTILLATION UNIT   P&ID  PID-CDU-001",
-                (70, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.9, black, 2, cv2.LINE_AA)
+    cv2.putText(
+        canvas,
+        "MRPL  CRUDE DISTILLATION UNIT   P&ID  PID-CDU-001",
+        (70, 100),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.9,
+        black,
+        2,
+        cv2.LINE_AA,
+    )
 
     # Vessel
     cv2.rectangle(canvas, (900, 400), (1200, 900), black, 3)
@@ -224,41 +236,61 @@ def main() -> int:
             native.unlink()
             final = scanned
 
-        manifest.append({
-            "doc_id": document.doc_id,
-            "path": str(final.relative_to(corpus)),
-            "title": document.title,
-            "doc_type": document.doc_type,
-            "classification": document.classification,
-            "departments": document.departments,
-            "tags": document.tags,
-            "scan_profile": document.scan_profile or "native",
-        })
+        manifest.append(
+            {
+                "doc_id": document.doc_id,
+                "path": str(final.relative_to(corpus)),
+                "title": document.title,
+                "doc_type": document.doc_type,
+                "classification": document.classification,
+                "departments": document.departments,
+                "tags": document.tags,
+                "scan_profile": document.scan_profile or "native",
+            }
+        )
         page_truth.append({"doc_id": document.doc_id, "text": document.plain_text})
         print(f"  {document.doc_id:<18} {final.relative_to(corpus)}")
 
     tags = render_tag_registry(corpus / "tabular" / "TAG-REGISTRY.xlsx")
     render_thickness_workbook(corpus / "tabular" / "V-1201-THICKNESS.xlsx")
     manifest += [
-        {"doc_id": "TAG-REGISTRY", "path": "tabular/TAG-REGISTRY.xlsx",
-         "title": "MRPL Equipment Tag Registry", "doc_type": "tabular",
-         "classification": "internal", "departments": ["inspection", "maintenance"],
-         "tags": tags, "scan_profile": "native"},
-        {"doc_id": "V-1201-THICKNESS", "path": "tabular/V-1201-THICKNESS.xlsx",
-         "title": "V-1201 Thickness Measurement History", "doc_type": "tabular",
-         "classification": "confidential", "departments": ["inspection"],
-         "tags": ["V-1201"], "scan_profile": "native"},
+        {
+            "doc_id": "TAG-REGISTRY",
+            "path": "tabular/TAG-REGISTRY.xlsx",
+            "title": "MRPL Equipment Tag Registry",
+            "doc_type": "tabular",
+            "classification": "internal",
+            "departments": ["inspection", "maintenance"],
+            "tags": tags,
+            "scan_profile": "native",
+        },
+        {
+            "doc_id": "V-1201-THICKNESS",
+            "path": "tabular/V-1201-THICKNESS.xlsx",
+            "title": "V-1201 Thickness Measurement History",
+            "doc_type": "tabular",
+            "classification": "confidential",
+            "departments": ["inspection"],
+            "tags": ["V-1201"],
+            "scan_profile": "native",
+        },
     ]
     print("  TAG-REGISTRY       tabular/TAG-REGISTRY.xlsx")
     print("  V-1201-THICKNESS   tabular/V-1201-THICKNESS.xlsx")
 
     pid_truth = render_pid(corpus / "drawings" / "PID-CDU-001.png", tags)
-    manifest.append({
-        "doc_id": "PID-CDU-001", "path": "drawings/PID-CDU-001.png",
-        "title": "P&ID CDU-001 — V-1201 Surge Drum", "doc_type": "drawing",
-        "classification": "confidential", "departments": ["inspection", "operations"],
-        "tags": sorted(pid_truth), "scan_profile": "native",
-    })
+    manifest.append(
+        {
+            "doc_id": "PID-CDU-001",
+            "path": "drawings/PID-CDU-001.png",
+            "title": "P&ID CDU-001 — V-1201 Surge Drum",
+            "doc_type": "drawing",
+            "classification": "confidential",
+            "departments": ["inspection", "operations"],
+            "tags": sorted(pid_truth),
+            "scan_profile": "native",
+        }
+    )
     print("  PID-CDU-001        drawings/PID-CDU-001.png")
 
     (truth_dir / "doc_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")

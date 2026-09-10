@@ -24,10 +24,10 @@ from typing import Any
 
 from workbench.core.errors import IngestionError, UnsupportedMediaTypeError
 from workbench.core.logging import get_logger
-from workbench.ingest.ir import Block, BlockSource, BlockType, DocumentIR, Page
+from workbench.ingest.ir import Block, BlockSource, BlockType, DocumentIR
 from workbench.ingest.ocr.engine import OCREngine, OcrResult
 from workbench.ingest.ocr.quality import QualityThresholds, assess, page_needs_ocr
-from workbench.ingest.sniff import ALLOWED_MIME, sniff
+from workbench.ingest.sniff import sniff
 from workbench.ingest.storage import BlobStore
 
 log = get_logger(__name__)
@@ -53,10 +53,20 @@ class Stage(StrEnum):
 #: Relative weight of each stage, for a progress figure that reflects reality
 #: rather than counting stages equally. OCR and embedding dominate.
 STAGE_WEIGHTS: dict[Stage, float] = {
-    Stage.RECEIVE: 1, Stage.IDENTIFY: 1, Stage.DEDUPE: 1, Stage.STORE: 2,
-    Stage.CLASSIFY: 1, Stage.EXTRACT: 8, Stage.OCR: 30, Stage.VISION: 20,
-    Stage.NORMALIZE: 2, Stage.RENDER: 6, Stage.CHUNK: 3, Stage.EMBED: 15,
-    Stage.INDEX: 8, Stage.FINALIZE: 2,
+    Stage.RECEIVE: 1,
+    Stage.IDENTIFY: 1,
+    Stage.DEDUPE: 1,
+    Stage.STORE: 2,
+    Stage.CLASSIFY: 1,
+    Stage.EXTRACT: 8,
+    Stage.OCR: 30,
+    Stage.VISION: 20,
+    Stage.NORMALIZE: 2,
+    Stage.RENDER: 6,
+    Stage.CHUNK: 3,
+    Stage.EMBED: 15,
+    Stage.INDEX: 8,
+    Stage.FINALIZE: 2,
 }
 _TOTAL_WEIGHT = sum(STAGE_WEIGHTS.values())
 
@@ -199,13 +209,12 @@ class IngestionPipeline:
                 image_dir=self.page_image_dir / doc_id,
                 filename=filename,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise IngestionError(f"{filename} could not be read: {exc}") from exc
 
         if ir.page_count > self.config.max_pages:
             raise IngestionError(
-                f"{filename} has {ir.page_count} pages, over the "
-                f"{self.config.max_pages}-page limit"
+                f"{filename} has {ir.page_count} pages, over the {self.config.max_pages}-page limit"
             )
         await finish(Stage.EXTRACT, started, f"{ir.page_count} pages, {len(ir.blocks)} blocks")
 
@@ -213,7 +222,8 @@ class IngestionPipeline:
         started = time.perf_counter()
         ocr_pages, ocr_results = await self._run_ocr(ir, blob.path, detected.mime, report)
         await finish(
-            Stage.OCR, started,
+            Stage.OCR,
+            started,
             f"recognised {ocr_pages} page(s)" if ocr_pages else "no OCR needed",
         )
 
@@ -222,11 +232,11 @@ class IngestionPipeline:
         escalated, vision_failed = await self._run_vision(ir, ocr_results, blob.path, detected.mime)
         if vision_failed:
             warnings.append(
-                "the vision model was unavailable; low-confidence pages were indexed "
-                "from OCR alone"
+                "the vision model was unavailable; low-confidence pages were indexed from OCR alone"
             )
         await finish(
-            Stage.VISION, started,
+            Stage.VISION,
+            started,
             f"re-read {escalated} page(s) with vision" if escalated else "no escalation needed",
         )
 
@@ -333,7 +343,7 @@ class IngestionPipeline:
                 image = await asyncio.to_thread(decode, raw)
                 prepared = await asyncio.to_thread(preprocess, image, options)
                 result = await asyncio.to_thread(self.ocr_engine.recognise, prepared.image)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 log.warning("ocr_page_failed", page=page.page_no, error=str(exc))
                 continue
 
@@ -393,7 +403,7 @@ class IngestionPipeline:
                 continue
             try:
                 blocks, _ = await self.vision.transcribe_page(raw, page.page_no)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 log.warning("vision_escalation_failed", page=page.page_no, error=str(exc))
                 failed = True
                 continue

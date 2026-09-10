@@ -52,7 +52,7 @@ async def readiness(request: Request) -> dict[str, Any]:
                 "healthy": True,
                 "latency_ms": int((time.perf_counter() - started) * 1000),
             }
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             components["database"] = {"healthy": False, "detail": str(exc)[:200]}
     else:
         components["database"] = {"healthy": False, "detail": "engine not initialised"}
@@ -86,7 +86,7 @@ async def _probe(url: str, timeout_s: float = 5.0) -> dict[str, Any]:
             "healthy": response.status_code < 400,
             "latency_ms": int((time.perf_counter() - started) * 1000),
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return {"healthy": False, "detail": f"{type(exc).__name__}: {exc}"[:200]}
 
 

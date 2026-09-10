@@ -53,8 +53,14 @@ _SIGNATURES: Final[tuple[tuple[int, bytes, str], ...]] = (
 _ZIP_SIGNATURES: Final[tuple[bytes, ...]] = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
 
 _OOXML_MARKERS: Final[tuple[tuple[str, str], ...]] = (
-    ("word/document.xml", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
-    ("ppt/presentation.xml", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+    (
+        "word/document.xml",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ),
+    (
+        "ppt/presentation.xml",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ),
     ("xl/workbook.xml", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
 )
 
@@ -113,11 +119,7 @@ def sniff(data: bytes, filename: str | None = None) -> SniffResult:
     return SniffResult(
         mime=detected,
         extension_mismatch=mismatch,
-        detail=(
-            f"content is {detected} but the filename suggests {hinted}"
-            if mismatch
-            else ""
-        ),
+        detail=(f"content is {detected} but the filename suggests {hinted}" if mismatch else ""),
     )
 
 

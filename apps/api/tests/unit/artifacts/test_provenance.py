@@ -14,8 +14,15 @@ from workbench.rag.citations import Citation
 
 def citation(n: int, doc_id: str, title: str, page: int, confidence: float = 1.0) -> Citation:
     return Citation(
-        n=n, chunk_id=f"c{n}", doc_id=doc_id, doc_title=title, doc_type="inspection",
-        page_no=page, bbox=BBox(), snippet="…", confidence=confidence,
+        n=n,
+        chunk_id=f"c{n}",
+        doc_id=doc_id,
+        doc_title=title,
+        doc_type="inspection",
+        page_no=page,
+        bbox=BBox(),
+        snippet="…",
+        confidence=confidence,
     )
 
 
@@ -75,9 +82,7 @@ def test_an_unapproved_document_says_so() -> None:
 
 
 def test_an_approved_document_names_the_approver() -> None:
-    rows = dict(
-        Provenance(approved_by="M. Devadiga", approved_at="2029-04-02T10:00:00").lines()
-    )
+    rows = dict(Provenance(approved_by="M. Devadiga", approved_at="2029-04-02T10:00:00").lines())
     assert "M. Devadiga" in rows["Approved by"]
 
 

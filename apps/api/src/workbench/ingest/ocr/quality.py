@@ -87,7 +87,9 @@ def assess(
 
     if result.word_count and confidence < thresholds.min_mean_confidence:
         reasons.append(EscalationReason.LOW_CONFIDENCE)
-        details.append(f"mean confidence {confidence:.0%} below {thresholds.min_mean_confidence:.0%}")
+        details.append(
+            f"mean confidence {confidence:.0%} below {thresholds.min_mean_confidence:.0%}"
+        )
 
     if result.word_count and result.alpha_ratio < thresholds.min_alpha_ratio:
         reasons.append(EscalationReason.GARBLED)

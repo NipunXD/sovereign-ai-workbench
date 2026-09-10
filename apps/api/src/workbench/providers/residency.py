@@ -114,9 +114,7 @@ class ResidencyManager:
                     "idle_s": round(time.monotonic() - entry.last_used, 1),
                     "mean_load_s": round(entry.mean_load_s, 2),
                 }
-                for entry in sorted(
-                    self._entries.values(), key=lambda e: e.last_used, reverse=True
-                )
+                for entry in sorted(self._entries.values(), key=lambda e: e.last_used, reverse=True)
             ],
         }
 
@@ -187,7 +185,7 @@ class ResidencyManager:
         started = time.perf_counter()
         try:
             await provider.ensure_loaded(info.physical_id)
-        except Exception as exc:  # noqa: BLE001 - a warm failure must not fail the request
+        except Exception as exc:
             log.warning("model_load_failed", model=info.logical_name, error=str(exc))
         elapsed = time.perf_counter() - started
 
@@ -218,7 +216,7 @@ class ResidencyManager:
         provider = self.registry.get_provider(info.provider)
         try:
             await provider.unload(info.physical_id)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.warning("model_unload_failed", model=logical_name, error=str(exc))
         # Drop the size accounting but keep the timing history, so the next load
         # of this model is priced from real measurements.
@@ -241,7 +239,7 @@ class ResidencyManager:
                 # Ollama can hold a model open indefinitely; others cannot.
                 if pin := getattr(provider, "pin", None):
                     await pin(info.physical_id)
-            except Exception as exc:  # noqa: BLE001 - startup must not be fatal
+            except Exception as exc:
                 log.warning("pinned_model_warm_failed", model=info.logical_name, error=str(exc))
 
     async def sync_from_providers(self) -> None:
@@ -255,7 +253,11 @@ class ResidencyManager:
         for provider_name, provider in self.registry.providers.items():
             try:
                 reported = await provider.resident_models()
-            except Exception:  # noqa: BLE001
+            except Exception as exc:
+                # A backend that cannot be polled is skipped, not fatal — but
+                # silently skipping it is how residency accounting drifts out
+                # of step with reality and nobody knows why.
+                log.debug("residency_poll_failed", provider=provider_name, error=str(exc))
                 continue
             if not reported:
                 continue
@@ -274,7 +276,8 @@ class ResidencyManager:
             # Only trust the reconciliation for backends that report residency.
             try:
                 reported = await provider.resident_models()
-            except Exception:  # noqa: BLE001
+            except Exception as exc:
+                log.debug("residency_poll_failed", provider=info.provider, error=str(exc))
                 continue
             if reported and logical not in actually_resident:
                 log.debug("residency_drift_corrected", model=logical)

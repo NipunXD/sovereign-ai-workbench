@@ -298,7 +298,9 @@ class Chunker:
     def _hard_split(text: str, budget: int) -> list[str]:
         words = text.split()
         per_piece = max(1, int(budget * CHARS_PER_TOKEN / 6))  # ~6 chars/word
-        return [" ".join(words[i : i + per_piece]) for i in range(0, len(words), per_piece)] or [text]
+        return [" ".join(words[i : i + per_piece]) for i in range(0, len(words), per_piece)] or [
+            text
+        ]
 
     @staticmethod
     def _prose_piece(block: Block, sentences: list[str], index: int) -> Block:
@@ -326,9 +328,7 @@ class Chunker:
         # a paragraph the recogniser struggled with.
         weighted = [(b.confidence, b.word_count) for b in blocks if b.word_count]
         total_words = sum(w for _, w in weighted)
-        confidence = (
-            sum(c * w for c, w in weighted) / total_words if total_words else 1.0
-        )
+        confidence = sum(c * w for c, w in weighted) / total_words if total_words else 1.0
 
         return Chunk(
             chunk_id=prefixed_id("chunk"),

@@ -73,7 +73,7 @@ def collect_outputs() -> list[dict]:
 def main() -> int:
     try:
         job = json.loads((IN_DIR / "job.json").read_text(encoding="utf-8"))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(json.dumps({"status": "error", "error": f"unreadable job: {exc}"}))
         return 2
 
@@ -96,13 +96,13 @@ def main() -> int:
 
     try:
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-            exec(compile(code, "<generated>", "exec"), namespace)  # noqa: S102
+            exec(compile(code, "<generated>", "exec"), namespace)
     except MemoryError:
         status, error = "memory", "the code exceeded the memory limit"
     except SystemExit as exc:
         if exc.code not in (0, None):
             status, error = "error", f"the code called sys.exit({exc.code})"
-    except BaseException as exc:  # noqa: BLE001 - report anything, including KeyboardInterrupt
+    except BaseException as exc:
         status = "error"
         # The last frame is what the author needs; the harness frames above it
         # are noise.

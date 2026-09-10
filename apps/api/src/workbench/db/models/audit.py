@@ -20,7 +20,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, Column, Index, Integer, String, text as sa_text
+from sqlalchemy import BigInteger, Column, Index, Integer, String
+from sqlalchemy import text as sa_text
 from sqlalchemy.dialects.postgresql import ARRAY, INET, JSONB
 from sqlmodel import Field, SQLModel
 
@@ -35,8 +36,8 @@ class AuditAction:
     LOGIN = "auth.login"
     LOGIN_FAILED = "auth.login_failed"
     LOGOUT = "auth.logout"
-    TOKEN_REFRESH = "auth.token_refresh"
-    TOKEN_REUSE_DETECTED = "auth.token_reuse_detected"
+    TOKEN_REFRESH = "auth.token_refresh"  # noqa: S105 — an event name
+    TOKEN_REUSE_DETECTED = "auth.token_reuse_detected"  # noqa: S105 — an event name
 
     DOC_INGEST = "doc.ingest"
     DOC_READ = "doc.read"
@@ -129,9 +130,13 @@ class AuditEvent(SQLModel, table=True):
     latency_ms: int | None = None
     tokens_in: int | None = None
     tokens_out: int | None = None
-    severity: int = Field(default=Severity.INFO, sa_column=Column(Integer, nullable=False, server_default=sa_text("0")))
+    severity: int = Field(
+        default=Severity.INFO,
+        sa_column=Column(Integer, nullable=False, server_default=sa_text("0")),
+    )
     audit_metadata: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column("metadata", JSONB, nullable=False, server_default="{}")
+        default_factory=dict,
+        sa_column=Column("metadata", JSONB, nullable=False, server_default="{}"),
     )
 
     # --- chain ---------------------------------------------------------------

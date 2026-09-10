@@ -50,7 +50,7 @@ def get_clock() -> Clock:
 
 def set_clock(clock: Clock) -> None:
     """Replace the process clock. Used by app startup and test fixtures."""
-    global _clock  # noqa: PLW0603
+    global _clock
     _clock = clock
 
 

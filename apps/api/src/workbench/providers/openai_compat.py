@@ -94,7 +94,7 @@ class OpenAICompatProvider:
                 latency_ms=int((time.perf_counter() - started) * 1000),
                 models_available=len(models),
             )
-        except Exception as exc:  # noqa: BLE001 - health must never raise
+        except Exception as exc:
             return ProviderHealth(
                 provider=self.name,
                 healthy=False,
@@ -221,9 +221,7 @@ class OpenAICompatProvider:
         finish_reason = "stop"
 
         try:
-            async with self._client.stream(
-                "POST", "/chat/completions", json=payload
-            ) as response:
+            async with self._client.stream("POST", "/chat/completions", json=payload) as response:
                 if response.status_code >= 400:
                     await response.aread()
                     self._raise_for_status(response, req.model)
@@ -259,9 +257,7 @@ class OpenAICompatProvider:
                     # Reasoning streams on its own channel so it never leaks
                     # into the answer text, and so the UI can show progress
                     # during the long silent think before the first real token.
-                    if reasoning := (
-                        delta.get("reasoning_content") or delta.get("reasoning")
-                    ):
+                    if reasoning := (delta.get("reasoning_content") or delta.get("reasoning")):
                         yield GenerationChunk(reasoning_delta=reasoning)
 
                     if text := delta.get("content"):
@@ -293,9 +289,7 @@ class OpenAICompatProvider:
         if not texts:
             return []
         try:
-            response = await self._client.post(
-                "/embeddings", json={"model": model, "input": texts}
-            )
+            response = await self._client.post("/embeddings", json={"model": model, "input": texts})
         except httpx.TimeoutException as exc:
             raise ProviderTimeoutError(f"{self.name} timed out embedding") from exc
         except httpx.HTTPError as exc:

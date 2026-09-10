@@ -10,16 +10,16 @@ return 403, it returns 404: for a classified document the difference between
 
 from __future__ import annotations
 
-import json
 from collections.abc import AsyncIterator
 from typing import Annotated, Any
 
+import anyio.to_thread
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
-from workbench.api.deps import Audit, CurrentPrincipal, DbSession, require_permission
+from workbench.api.deps import Audit, DbSession, require_permission
 from workbench.api.sse import SSE_HEADERS, format_sse
 from workbench.core.classification import Classification
 from workbench.core.errors import NotFoundError, ValidationError
@@ -158,9 +158,7 @@ async def get_document(
 ) -> DocumentDetail:
     document = await _load_visible(session, document_id, principal)
     count = (
-        await session.execute(
-            select(func.count(Chunk.id)).where(Chunk.document_id == document.id)
-        )
+        await session.execute(select(func.count(Chunk.id)).where(Chunk.document_id == document.id))
     ).scalar_one()
 
     await audit.log(
@@ -201,7 +199,9 @@ async def page_image(
     from pathlib import Path
 
     path = Path(page.image_path)
-    if not path.is_file():
+    # Awaited off the loop: a stat on a slow or stalled mount would otherwise
+    # block every other request in flight, not just this one.
+    if not await anyio.to_thread.run_sync(path.is_file):
         raise NotFoundError("The page image is missing from storage.")
     return FileResponse(path, media_type="image/png")
 
@@ -345,8 +345,12 @@ async def upload(
         queue: list[tuple[str, dict[str, Any]]] = []
 
         async def progress(stage: Any, fraction: float, message: str) -> None:
-            queue.append(("progress", {"stage": stage.value, "progress": round(fraction, 3),
-                                       "message": message}))
+            queue.append(
+                (
+                    "progress",
+                    {"stage": stage.value, "progress": round(fraction, 3), "message": message},
+                )
+            )
 
         try:
             result = await pipeline.run(
@@ -358,7 +362,9 @@ async def upload(
 
             if not result.ok or result.ir is None:
                 seq += 1
-                yield format_sse("error", {"message": "The document could not be processed."}, seq=seq)
+                yield format_sse(
+                    "error", {"message": "The document could not be processed."}, seq=seq
+                )
                 return
 
             from workbench.db.session import session_scope
@@ -396,7 +402,7 @@ async def upload(
                 },
                 seq=seq,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.exception("upload_failed", filename=filename, error=str(exc))
             for name, payload in queue:
                 seq += 1
@@ -443,9 +449,7 @@ async def delete_document(
 
     document.deleted_at = now()
     document.status = DocStatus.PENDING
-    await session.execute(
-        Chunk.__table__.delete().where(Chunk.document_id == document_id)
-    )
+    await session.execute(Chunk.__table__.delete().where(Chunk.document_id == document_id))
     await audit.log(
         AuditAction.DOC_DELETE,
         actor_user_id=principal.user_id,

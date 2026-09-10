@@ -7,7 +7,6 @@ the model is never asked whether its own code should run.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -69,9 +68,7 @@ class RunPythonTool(BaseTool):
     async def run(self, args: BaseModel, ctx: ToolContext) -> ToolResult:
         assert isinstance(args, CodeInput)
 
-        result = await self.backend.execute(
-            SandboxJob(code=args.code, timeout_s=args.timeout_s)
-        )
+        result = await self.backend.execute(SandboxJob(code=args.code, timeout_s=args.timeout_s))
 
         files: list[dict[str, Any]] = []
         for output in result.output_files:

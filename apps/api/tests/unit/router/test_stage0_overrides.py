@@ -16,9 +16,6 @@ from workbench.providers.types import Capability, Lane
 from workbench.router.router import ModelRouter, RouteRequest
 
 
-
-
-
 @pytest.fixture
 def router(registry: ModelRegistry, router_config_path: Path) -> ModelRouter:
     return ModelRouter(registry, config_path=router_config_path)
@@ -61,9 +58,7 @@ async def test_no_image_does_not_reach_vision(router: ModelRouter) -> None:
 
 
 async def test_long_prompt_routes_to_long_context(router: ModelRouter) -> None:
-    decision = await router.route(
-        RouteRequest(text="summarise this", estimated_tokens=50_000)
-    )
+    decision = await router.route(RouteRequest(text="summarise this", estimated_tokens=50_000))
     assert decision.lane is Lane.LONG_CTX
     assert decision.stage_decided == 0
 
