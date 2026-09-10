@@ -55,16 +55,16 @@ export default function DocumentsPage() {
               hint="Run `python scripts/seed_corpus.py` to generate and ingest the sample MRPL corpus."
             />
           ) : (
-            <table className="w-full border-collapse text-xs">
+            <table className="w-full table-fixed border-collapse text-xs">
               <thead className="sticky top-0 bg-surface">
                 <tr className="border-b border-border text-2xs uppercase tracking-wider text-fg-subtle">
-                  <th className="px-4 py-2 text-left font-semibold">Title</th>
-                  <th className="px-2 py-2 text-left font-semibold">Type</th>
-                  <th className="px-2 py-2 text-left font-semibold">Classification</th>
-                  <th className="px-2 py-2 text-right font-semibold">Pages</th>
-                  <th className="px-2 py-2 text-right font-semibold">Chunks</th>
-                  <th className="px-2 py-2 text-right font-semibold">Quality</th>
-                  <th className="px-4 py-2 text-right font-semibold">Ingested</th>
+                  <th className="w-[38%] px-4 py-2 text-left font-semibold">Title</th>
+                  <th className="w-[11%] px-2 py-2 text-left font-semibold">Type</th>
+                  <th className="w-[12%] px-2 py-2 text-left font-semibold">Classification</th>
+                  <th className="w-[7%] px-2 py-2 text-right font-semibold">Pages</th>
+                  <th className="w-[8%] px-2 py-2 text-right font-semibold">Chunks</th>
+                  <th className="w-[10%] px-2 py-2 text-right font-semibold">Quality</th>
+                  <th className="w-[15%] px-4 py-2 text-right font-semibold">Ingested</th>
                 </tr>
               </thead>
               <tbody>
@@ -77,7 +77,7 @@ export default function DocumentsPage() {
                       docId === doc.id && "bg-surface-raised",
                     )}
                   >
-                    <td className="max-w-0 px-4 py-2">
+                    <td className="px-4 py-2">
                       <p className="truncate font-medium text-fg">{doc.title}</p>
                       {doc.tags.length ? (
                         <p className="mt-0.5 truncate font-mono text-2xs text-fg-subtle">
@@ -85,7 +85,7 @@ export default function DocumentsPage() {
                         </p>
                       ) : null}
                     </td>
-                    <td className="px-2 py-2 text-fg-muted">{doc.doc_type}</td>
+                    <td className="truncate px-2 py-2 text-fg-muted">{doc.doc_type}</td>
                     <td className="px-2 py-2">
                       <ClassificationBadge level={doc.classification} />
                     </td>
