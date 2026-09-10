@@ -1,0 +1,162 @@
+[
+  {
+    "doc_id": "SOP-4412",
+    "path": "sop/SOP-4412.pdf",
+    "title": "SOP-4412 Vessel Shutdown and Depressurisation Procedure",
+    "doc_type": "sop",
+    "classification": "internal",
+    "departments": [
+      "operations",
+      "inspection"
+    ],
+    "tags": [
+      "V-1201",
+      "shutdown",
+      "depressurisation"
+    ],
+    "scan_profile": "native"
+  },
+  {
+    "doc_id": "INSP-2029-V1201",
+    "path": "inspection/INSP-2029-V1201-scanned.pdf",
+    "title": "Inspection Report V-1201 \u2014 Shell Thickness Survey March 2029",
+    "doc_type": "inspection",
+    "classification": "confidential",
+    "departments": [
+      "inspection"
+    ],
+    "tags": [
+      "V-1201",
+      "UT",
+      "corrosion"
+    ],
+    "scan_profile": "photocopy"
+  },
+  {
+    "doc_id": "INSP-2023-V1201",
+    "path": "inspection/INSP-2023-V1201-scanned.pdf",
+    "title": "Inspection Report V-1201 \u2014 Shell Thickness Survey March 2023",
+    "doc_type": "inspection",
+    "classification": "confidential",
+    "departments": [
+      "inspection"
+    ],
+    "tags": [
+      "V-1201",
+      "UT"
+    ],
+    "scan_profile": "office"
+  },
+  {
+    "doc_id": "MEMO-2029-014",
+    "path": "correspondence/MEMO-2029-014.pdf",
+    "title": "Internal Memo \u2014 CDU Turnaround Scope and Budget 2029",
+    "doc_type": "correspondence",
+    "classification": "restricted",
+    "departments": [
+      "finance",
+      "maintenance"
+    ],
+    "tags": [
+      "turnaround",
+      "budget"
+    ],
+    "scan_profile": "native"
+  },
+  {
+    "doc_id": "MAINT-LOG-2029Q1",
+    "path": "tabular/MAINT-LOG-2029Q1.pdf",
+    "title": "Maintenance Activity Log \u2014 Q1 2029",
+    "doc_type": "tabular",
+    "classification": "internal",
+    "departments": [
+      "maintenance",
+      "inspection"
+    ],
+    "tags": [
+      "P-101A",
+      "E-2405",
+      "V-1201",
+      "PSV-1207"
+    ],
+    "scan_profile": "native"
+  },
+  {
+    "doc_id": "SOP-2210",
+    "path": "sop/SOP-2210.pdf",
+    "title": "SOP-2210 Centrifugal Pump Vibration Monitoring",
+    "doc_type": "sop",
+    "classification": "internal",
+    "departments": [
+      "maintenance"
+    ],
+    "tags": [
+      "P-101A",
+      "vibration"
+    ],
+    "scan_profile": "native"
+  },
+  {
+    "doc_id": "TAG-REGISTRY",
+    "path": "tabular/TAG-REGISTRY.xlsx",
+    "title": "MRPL Equipment Tag Registry",
+    "doc_type": "tabular",
+    "classification": "internal",
+    "departments": [
+      "inspection",
+      "maintenance"
+    ],
+    "tags": [
+      "V-1201",
+      "V-1202",
+      "P-101A",
+      "P-101B",
+      "E-2405",
+      "HV-1205",
+      "XV-1207",
+      "PSV-1207",
+      "PT-3402",
+      "FI-1205"
+    ],
+    "scan_profile": "native"
+  },
+  {
+    "doc_id": "V-1201-THICKNESS",
+    "path": "tabular/V-1201-THICKNESS.xlsx",
+    "title": "V-1201 Thickness Measurement History",
+    "doc_type": "tabular",
+    "classification": "confidential",
+    "departments": [
+      "inspection"
+    ],
+    "tags": [
+      "V-1201"
+    ],
+    "scan_profile": "native"
+  },
+  {
+    "doc_id": "PID-CDU-001",
+    "path": "drawings/PID-CDU-001.png",
+    "title": "P&ID CDU-001 \u2014 V-1201 Surge Drum",
+    "doc_type": "drawing",
+    "classification": "confidential",
+    "departments": [
+      "inspection",
+      "operations"
+    ],
+    "tags": [
+      "E-2405",
+      "FI-1205",
+      "HV-1205",
+      "P-101A",
+      "P-101B",
+      "PSV-1207",
+      "PT-3402",
+      "SURGE DRUM",
+      "TO FLARE",
+      "V-1201",
+      "XV-1207"
+    ],
+    "scan_profile": "native"
+  }
+]

@@ -122,14 +122,51 @@ class HybridRetriever:
             return []
         return [{"chunk_id": h.chunk_id, **h.payload, "dense_score": h.score} for h in hits]
 
+    @staticmethod
+    def _tsquery(query: str) -> str:
+        """Build an OR-of-terms tsquery from a natural question.
+
+        ``websearch_to_tsquery`` and ``plainto_tsquery`` both AND their terms, so
+        "What is the depressurisation rate limit for V-1201?" matches only a
+        chunk containing every one of those words — which is essentially never,
+        and it silently reduced hybrid search to dense-only.
+
+        Terms are OR-ed instead, which is what a BM25-style ranker expects: the
+        scoring function decides relevance, not a hard conjunction. Equipment
+        tags are kept whole because "V-1201" is the single most discriminating
+        token a refinery query can contain.
+        """
+        import re
+
+        # Keep tags intact; split everything else on non-word characters.
+        tags = re.findall(r"[A-Za-z]{1,4}-\d{1,5}[A-Za-z]?", query)
+        remainder = re.sub(r"[A-Za-z]{1,4}-\d{1,5}[A-Za-z]?", " ", query)
+        words = [w for w in re.findall(r"[A-Za-z0-9]{3,}", remainder)]
+
+        stop = {
+            "the", "and", "for", "what", "which", "with", "from", "that", "this",
+            "are", "was", "were", "has", "have", "does", "did", "how", "why",
+            "when", "where", "who", "whom", "into", "onto", "about", "any", "all",
+        }
+        terms = [*tags, *(w for w in words if w.lower() not in stop)]
+        if not terms:
+            terms = words or tags
+        if not terms:
+            return ""
+        # Quote each term so punctuation inside a tag cannot break the syntax.
+        return " | ".join(f"'{t}'" for t in dict.fromkeys(terms))
+
     async def _sparse(self, query: str, principal: Principal) -> list[dict[str, Any]]:
         """Postgres full-text search, with the same access clause in SQL.
 
-        This is where an exact equipment tag is found. ``websearch_to_tsquery``
-        is used rather than ``plainto_tsquery`` because it tolerates the
-        punctuation in a real question without raising.
+        This is where an exact equipment tag is found — the thing a dense
+        embedding is worst at, because V-1201 and V-1202 embed almost
+        identically.
         """
         if self.session_factory is None:
+            return []
+        tsquery = self._tsquery(query)
+        if not tsquery:
             return []
 
         sql = sa_text(
@@ -137,10 +174,10 @@ class HybridRetriever:
             SELECT c.id AS chunk_id, c.text, c.document_id, c.page_from, c.page_to,
                    c.section_path, c.bbox_union, c.mean_confidence, c.parent_id,
                    d.title AS doc_title, d.doc_type,
-                   ts_rank_cd(c.tsv, websearch_to_tsquery('english', :q)) AS rank
+                   ts_rank_cd(c.tsv, to_tsquery('english', :q)) AS rank
             FROM chunks c
             JOIN documents d ON d.id = c.document_id
-            WHERE c.tsv @@ websearch_to_tsquery('english', :q)
+            WHERE c.tsv @@ to_tsquery('english', :q)
               AND d.deleted_at IS NULL
               AND c.classification = ANY(:classifications)
               AND (
@@ -158,7 +195,7 @@ class HybridRetriever:
                     await session.execute(
                         sql,
                         {
-                            "q": query,
+                            "q": tsquery,
                             "classifications": principal.visible_classifications,
                             "departments": sorted(principal.departments) or [""],
                             "no_department_filter": not principal.departments,

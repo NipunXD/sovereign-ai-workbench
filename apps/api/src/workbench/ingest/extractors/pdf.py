@@ -50,7 +50,14 @@ class PdfExtractor:
         self.viewer_dpi = viewer_dpi
         self.ocr_dpi = ocr_dpi
 
-    def extract(self, path: Path, doc_id: str, *, image_dir: Path | None = None) -> DocumentIR:
+    def extract(
+        self,
+        path: Path,
+        doc_id: str,
+        *,
+        image_dir: Path | None = None,
+        filename: str | None = None,
+    ) -> DocumentIR:
         started = time.perf_counter()
         timings: dict[str, float] = {}
         warnings: list[str] = []
@@ -86,7 +93,8 @@ class PdfExtractor:
 
         return DocumentIR(
             doc_id=doc_id,
-            title=str(metadata.get("title") or path.stem),
+            # `path` is the content-addressed blob, so its stem is a hash.
+            title=str(metadata.get("title") or Path(filename or path.name).stem),
             mime="application/pdf",
             page_count=len(pages),
             pages=pages,

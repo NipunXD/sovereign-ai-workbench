@@ -26,11 +26,15 @@ render:
 ocr:
   engine: rapidocr       # rapidocr | tesseract  (same OCREngine protocol)
   languages: [en]
+  # Measured on the seed corpus, mean CER across scan profiles:
+  #   raw 16.6% | clahe 7.6% | clahe+denoise 8.7% | clahe+threshold 67.5%
+  # Binarisation destroys the greyscale detail RapidOCR's models rely on.
+  # Re-measure with `make eval-ocr` before changing these.
   preprocess:
     deskew: true
-    denoise: true
+    denoise: false
     clahe: true
-    adaptive_threshold: true
+    adaptive_threshold: false
     min_effective_dpi: 300
   # Escalation to the VLM. A scanned page that trips any of these gets a second
   # pass from vision.primary, and the merged result records source="vlm".
