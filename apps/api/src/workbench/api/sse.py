@@ -34,6 +34,45 @@ def format_sse(name: str, data: dict[str, Any], *, seq: int | None = None) -> st
     return "\n".join(lines) + "\n\n"
 
 
+async def with_heartbeat(
+    frames: AsyncIterator[str], *, interval_s: float = HEARTBEAT_INTERVAL_S
+) -> AsyncIterator[str]:
+    """Interleave comment frames into a stream that may go quiet.
+
+    An agent run has long legitimate silences — a local model thinking, a
+    90-second tool argument generation, and above all the wait for a human to
+    approve a document, which is silent for three minutes by design. Nothing
+    distinguishes those from a dead connection except traffic, so the server
+    has to produce some.
+
+    Without this the silence is indistinguishable from a hang at both ends: a
+    proxy may reap the connection, and the browser's own stall detection fires
+    on a run that is working perfectly and merely waiting for a person.
+    """
+    queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=256)
+
+    async def pump() -> None:
+        try:
+            async for frame in frames:
+                await queue.put(frame)
+        finally:
+            await queue.put(None)
+
+    task = asyncio.create_task(pump())
+    try:
+        while True:
+            try:
+                frame = await asyncio.wait_for(queue.get(), timeout=interval_s)
+            except TimeoutError:
+                yield ": ping\n\n"
+                continue
+            if frame is None:
+                return
+            yield frame
+    finally:
+        task.cancel()
+
+
 async def event_stream(
     bus: EventBus,
     run_id: str,

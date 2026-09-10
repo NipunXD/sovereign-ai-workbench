@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 from workbench.agent.runner import AgentRunner
 from workbench.agent.state import Budget
 from workbench.api.deps import CurrentPrincipal, DbSession, require_permission
-from workbench.api.sse import SSE_HEADERS, EventName, format_sse
+from workbench.api.sse import SSE_HEADERS, EventName, format_sse, with_heartbeat
 from workbench.api.v1.runs import close_run, open_run
 from workbench.core.ids import prefixed_id
 from workbench.core.logging import get_logger
@@ -246,7 +246,12 @@ async def chat_stream(
                 principal=principal,
             )
 
-    return StreamingResponse(stream(), media_type="text/event-stream", headers=SSE_HEADERS)
+    # Wrapped so the connection carries traffic during the run's silences. The
+    # longest is the approval wait — three minutes of nothing by design, which
+    # without this reads as a dead stream to both proxies and the browser.
+    return StreamingResponse(
+        with_heartbeat(stream()), media_type="text/event-stream", headers=SSE_HEADERS
+    )
 
 
 @router.get("/runs/{run_id}/events")

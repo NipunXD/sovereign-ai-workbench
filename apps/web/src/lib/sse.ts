@@ -18,6 +18,7 @@ export interface SSEMessage {
 export async function* parseSSE(
   stream: ReadableStream<Uint8Array>,
   signal?: AbortSignal,
+  onActivity?: () => void,
 ): AsyncGenerator<SSEMessage> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
@@ -28,6 +29,12 @@ export async function* parseSSE(
       if (signal?.aborted) return;
       const { done, value } = await reader.read();
       if (done) break;
+
+      // Any bytes at all mean the connection is alive — including the
+      // server's heartbeat, which is a comment frame that parseFrame
+      // deliberately discards and so would otherwise never be seen by a
+      // caller watching for a stalled stream.
+      onActivity?.();
 
       buffer += decoder.decode(value, { stream: true });
 
@@ -79,6 +86,9 @@ export interface StreamOptions {
   token?: string | null;
   signal?: AbortSignal;
   headers?: Record<string, string>;
+  /** Called whenever bytes arrive, heartbeats included. For callers that need
+   *  to tell a slow run from a dead connection. */
+  onActivity?: () => void;
 }
 
 /** Open an SSE stream against the API. */
@@ -86,7 +96,7 @@ export async function* streamRequest(
   url: string,
   options: StreamOptions = {},
 ): AsyncGenerator<SSEMessage> {
-  const { method = "POST", body, formData, token, signal, headers = {} } = options;
+  const { method = "POST", body, formData, token, signal, headers = {}, onActivity } = options;
 
   const response = await fetch(url, {
     method,
@@ -117,5 +127,5 @@ export async function* streamRequest(
   }
   if (!response.body) throw new Error("The response carried no stream.");
 
-  yield* parseSSE(response.body, signal);
+  yield* parseSSE(response.body, signal, onActivity);
 }

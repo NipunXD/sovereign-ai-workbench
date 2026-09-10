@@ -9,9 +9,11 @@ import { useRun } from "@/stores/run";
 
 /** How long silence has to last before the stream is treated as dead.
  *
- *  The server heartbeats every 15s, so this is six missed beats. Generous on
- *  purpose: a local model can take a couple of minutes on one step, and
- *  aborting a run that is merely slow would be worse than waiting. */
+ *  Six missed heartbeats. The threshold only means anything because the server
+ *  heartbeats through the *whole* run — an earlier version of this assumed it
+ *  did while only the replay endpoint actually did, so any genuine pause past
+ *  90s aborted a healthy run. The approval wait, silent for three minutes by
+ *  design, hit it every time. */
 const STALL_AFTER_MS = 90_000;
 const STALL_CHECK_MS = 5_000;
 
@@ -95,9 +97,9 @@ export function useAgentStream() {
       let finished = false;
       let lastEventAt = Date.now();
 
-      // The server sends an SSE heartbeat every 15s precisely so silence is
-      // detectable. If even those stop, the run is not slow — the connection
-      // is gone — and saying so beats a spinner that never resolves.
+      // The server heartbeats every 15s through the whole run, so silence
+      // this long means the connection is gone rather than the run being
+      // slow. Saying so beats a spinner that never resolves.
       const watchdog = window.setInterval(() => {
         if (Date.now() - lastEventAt < STALL_AFTER_MS) return;
         window.clearInterval(watchdog);
@@ -109,6 +111,12 @@ export function useAgentStream() {
           body: { message },
           token: getAccessToken(),
           signal: controller.current.signal,
+          // Heartbeats count. The run is legitimately silent for minutes
+          // while a document waits on a human approver, and treating that as
+          // a dead connection killed a run that was working.
+          onActivity: () => {
+            lastEventAt = Date.now();
+          },
         })) {
           const at = Date.now();
           lastEventAt = at;
