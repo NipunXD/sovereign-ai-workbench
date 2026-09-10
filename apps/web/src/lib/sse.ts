@@ -73,6 +73,9 @@ function parseFrame(frame: string): SSEMessage | null {
 export interface StreamOptions {
   method?: "GET" | "POST";
   body?: unknown;
+  /** Sent as-is, for multipart uploads. The browser sets the boundary itself,
+   *  so no Content-Type header may be supplied alongside it. */
+  formData?: FormData;
   token?: string | null;
   signal?: AbortSignal;
   headers?: Record<string, string>;
@@ -83,7 +86,7 @@ export async function* streamRequest(
   url: string,
   options: StreamOptions = {},
 ): AsyncGenerator<SSEMessage> {
-  const { method = "POST", body, token, signal, headers = {} } = options;
+  const { method = "POST", body, formData, token, signal, headers = {} } = options;
 
   const response = await fetch(url, {
     method,
@@ -91,11 +94,13 @@ export async function* streamRequest(
     credentials: "include",
     headers: {
       Accept: "text/event-stream",
+      // Never set Content-Type for FormData: the browser has to generate the
+      // multipart boundary, and supplying the header suppresses it.
       ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: formData ?? (body !== undefined ? JSON.stringify(body) : undefined),
   });
 
   if (!response.ok) {

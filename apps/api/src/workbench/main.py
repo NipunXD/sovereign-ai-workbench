@@ -298,13 +298,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             media_type="application/problem+json",
         )
 
-    from workbench.api.v1 import auth, chat, documents, health, search
+    from workbench.api.v1 import audit, auth, chat, documents, health, search
 
     app.include_router(health.router, prefix="/api/v1")
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(chat.router, prefix="/api/v1")
     app.include_router(documents.router, prefix="/api/v1")
     app.include_router(search.router, prefix="/api/v1")
+    app.include_router(audit.router, prefix="/api/v1")
 
     return app
 

@@ -8,6 +8,9 @@
  */
 
 import type {
+  AuditPage,
+  AuditSummary,
+  ChainReport,
   DocumentSummary,
   EgressReport,
   LoginResponse,
@@ -186,6 +189,29 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ query, k }),
     }),
+
+  // --- audit ----------------------------------------------------------------
+
+  auditEvents: (params: {
+    actor?: string;
+    action?: string;
+    decision?: string;
+    since_hours?: number;
+    limit?: number;
+  } = {}) => {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== "") query.set(key, String(value));
+    }
+    return request<AuditPage>(`/audit/events?${query}`);
+  },
+
+  verifyChain: () => request<ChainReport>("/audit/verify"),
+
+  auditSummary: (since_hours = 24) =>
+    request<AuditSummary>(`/audit/summary?since_hours=${since_hours}`),
+
+  auditExportUrl: () => `${BASE}/audit/export`,
 
   // --- system ---------------------------------------------------------------
 

@@ -243,3 +243,69 @@ export interface RunSummary {
   citations: number;
   evidence_used: number;
 }
+
+
+// --- audit -------------------------------------------------------------------
+
+export interface AuditEvent {
+  seq: number;
+  ts: string;
+  actor_username: string | null;
+  actor_roles: string[];
+  action: string;
+  decision: "allow" | "deny" | "error";
+  reason: string | null;
+  resource_type: string | null;
+  resource_id: string | null;
+  run_id: string | null;
+  model_used: string | null;
+  lane: string | null;
+  tool_name: string | null;
+  latency_ms: number | null;
+  severity: number;
+  metadata: Record<string, unknown>;
+  hash: string;
+  prev_hash: string;
+}
+
+export interface AuditPage {
+  events: AuditEvent[];
+  total: number;
+  actions: string[];
+  actors: string[];
+}
+
+export interface ChainReport {
+  valid: boolean;
+  events_checked: number;
+  first_invalid_seq: number | null;
+  detail: string;
+}
+
+export interface AuditSummary {
+  since_hours: number;
+  by_action: Array<{ action: string; count: number }>;
+  by_decision: Record<string, number>;
+  recent_denials: AuditEvent[];
+}
+
+// --- ingestion ---------------------------------------------------------------
+
+export interface IngestProgress {
+  stage: string;
+  progress: number;
+  message: string;
+}
+
+export interface IngestComplete {
+  document_id: string;
+  title: string;
+  pages: number;
+  chunks: number;
+  vectors: number;
+  mean_confidence: number;
+  degraded: boolean;
+  warnings: string[];
+  ocr_pages: number;
+  vlm_pages: number;
+}

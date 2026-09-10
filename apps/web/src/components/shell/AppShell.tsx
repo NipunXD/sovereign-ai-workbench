@@ -3,7 +3,15 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { FileText, LogOut, MessageSquare, Search, Settings2 } from "lucide-react";
+import {
+  FileText,
+  LogOut,
+  MessageSquare,
+  ScrollText,
+  Search,
+  Settings2,
+  UploadCloud,
+} from "lucide-react";
 
 import { SovereigntyBar } from "@/components/shell/SovereigntyBar";
 import { SystemStatus } from "@/components/shell/SystemStatus";
@@ -11,10 +19,14 @@ import { ClassificationBadge } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/stores/session";
 
+/** Nav entries are permission-gated. A destination a user cannot use is not
+ *  shown at all rather than shown and then refused. */
 const NAV = [
   { href: "/chat", label: "Workbench", icon: MessageSquare, permission: "chat:use" },
   { href: "/documents", label: "Documents", icon: FileText, permission: "doc:read" },
+  { href: "/upload", label: "Ingest", icon: UploadCloud, permission: "doc:ingest" },
   { href: "/search", label: "Retrieval", icon: Search, permission: "doc:read" },
+  { href: "/audit", label: "Audit log", icon: ScrollText, permission: "audit:read" },
   { href: "/admin", label: "System", icon: Settings2, permission: null },
 ];
 
