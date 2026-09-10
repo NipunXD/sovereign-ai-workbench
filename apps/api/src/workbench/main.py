@@ -83,14 +83,43 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     app.state.events = get_event_bus()
 
+    # --- sandbox and artifacts ---
+    from workbench.artifacts.store import ArtifactStore
+    from workbench.sandbox.fake_backend import build_backend
+
+    app.state.artifact_store = ArtifactStore(settings.artifact_dir)
+    sandbox = build_backend(
+        settings.sandbox_backend,
+        workspace_root=settings.workspace_dir,
+        image=settings.sandbox_image,
+    )
+    app.state.sandbox = sandbox
+    healthy, detail = await sandbox.health()
+    log.info("sandbox_ready" if healthy else "sandbox_unavailable", backend=sandbox.name, detail=detail)
+    # Containers left by a crashed process hold their memory reservation, so
+    # they are cleared before this one starts creating more.
+    if reap := getattr(sandbox, "reap_orphans", None):
+        await reap()
+
     # --- tools ---
     # Registered here rather than discovered by import side effect, so the set
     # of things the agent can do is visible in one place.
+    from workbench.tools.artifacts import DocxTool, XlsxTool
     from workbench.tools.calc import EngineeringCalcTool
+    from workbench.tools.code import RunPythonTool
     from workbench.tools.registry import ToolRegistry
 
+    # Files produced by sandbox runs, so a later artifact step can embed a chart
+    # an earlier step generated.
+    app.state.generated_files = {}
+
     tools = ToolRegistry(settings.tools_config)
-    tools.register_all(EngineeringCalcTool())
+    tools.register_all(
+        EngineeringCalcTool(),
+        RunPythonTool(sandbox, artifact_files=app.state.generated_files),
+        DocxTool(app.state.artifact_store, images=app.state.generated_files),
+        XlsxTool(app.state.artifact_store),
+    )
     app.state.tools = tools
 
     # --- database ---
@@ -99,11 +128,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         init_engine(settings)
         app.state.db_ready = True
+
+        # The approval gate needs durable state: the approver is a different
+        # person, at a different browser, often after a restart.
+        from workbench.agent.approval import ApprovalGate
+        from workbench.db.session import get_session_factory
+
+        app.state.approval_gate = ApprovalGate(get_session_factory())
     except Exception as exc:  # noqa: BLE001
         # The service still serves /health and the admin status grid without a
         # database, which is what an operator needs in order to diagnose why.
         log.error("database_init_failed", error=str(exc))
         app.state.db_ready = False
+        app.state.approval_gate = None
 
     # A manifest declares intent; what is installed is a separate fact. Probing
     # at boot keeps the router from selecting a model that was never pulled and
@@ -298,7 +335,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             media_type="application/problem+json",
         )
 
-    from workbench.api.v1 import audit, auth, chat, documents, health, search
+    from workbench.api.v1 import (
+        approvals,
+        audit,
+        auth,
+        chat,
+        documents,
+        health,
+        search,
+    )
 
     app.include_router(health.router, prefix="/api/v1")
     app.include_router(auth.router, prefix="/api/v1")
@@ -306,6 +351,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(documents.router, prefix="/api/v1")
     app.include_router(search.router, prefix="/api/v1")
     app.include_router(audit.router, prefix="/api/v1")
+    app.include_router(approvals.router, prefix="/api/v1")
 
     return app
 

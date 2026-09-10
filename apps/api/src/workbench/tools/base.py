@@ -75,6 +75,11 @@ class ToolContext:
     emit: Callable[[str, dict[str, Any]], Awaitable[None]] | None = None
     #: Wall-clock deadline inherited from the run's budget.
     deadline: float = 0.0
+    #: What the run has established so far — models used, evidence cited, tools
+    #: called, who approved. Provenance is built from this rather than from the
+    #: model's arguments, because a model asked to state its own sources is free
+    #: to invent them, and the entire point of the block is that it cannot.
+    run_context: dict[str, Any] = field(default_factory=dict)
 
     async def trace(self, name: str, data: dict[str, Any]) -> None:
         if self.emit is not None:

@@ -13,6 +13,7 @@ that; ``agent_steps`` in the database is the durable record.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from collections.abc import AsyncIterator
@@ -135,12 +136,20 @@ class AgentRunner:
         tools: ToolRegistry,
         retriever: Retriever | None = None,
         residency: Any = None,
+        approval_gate: Any = None,
+        approval_wait_s: float = 180.0,
+        arg_binding_timeout_s: float = 90.0,
     ) -> None:
         self.router = router
         self.registry = registry
         self.tools = tools
         self.retriever = retriever
         self.residency = residency
+        self.approval_gate = approval_gate
+        #: How long a run holds open waiting for a person. Bounded: a request
+        #: that waits forever is a queue of half-finished work nobody can see.
+        self.approval_wait_s = approval_wait_s
+        self.arg_binding_timeout_s = arg_binding_timeout_s
 
     # ------------------------------------------------------------------ run
     async def run(
@@ -479,32 +488,45 @@ class AgentRunner:
         evidence_text = build_evidence_prompt(state.get("evidence") or [])
         prior = json.dumps(state["scratchpad"], indent=2)[:2000] if state["scratchpad"] else "(none)"
 
-        result = await self._generate(
-            decision.model.logical_name,
-            [
-                ChatMessage(
-                    role="system",
-                    content=(
-                        f"Produce the arguments for the tool '{spec.name}'.\n"
-                        f"{spec.description}\n\n"
-                        "Take every value from the sources or from earlier tool results. "
-                        "Never invent a number. If a required value is not present, return "
-                        '{"_missing": "what is absent"} instead of guessing.\n\n'
-                        "Respond with JSON matching this schema only."
-                    ),
+        # Bounded. Constrained decoding against a large schema can stall for
+        # minutes on a local model, and a run that silently hangs on argument
+        # generation is indistinguishable from one that crashed.
+        try:
+            result = await asyncio.wait_for(
+                self._generate(
+                    decision.model.logical_name,
+                    [
+                        ChatMessage(
+                            role="system",
+                            content=(
+                                f"Produce the arguments for the tool '{spec.name}'.\n"
+                                f"{spec.description}\n\n"
+                                "Take every value from the sources or from earlier tool "
+                                "results. Never invent a number. If a required value is not "
+                                'present, return {"_missing": "what is absent"} instead of '
+                                "guessing.\n\nRespond with JSON matching this schema only."
+                            ),
+                        ),
+                        ChatMessage(
+                            role="user",
+                            content=(
+                                f"Question: {state['user_input']}\n"
+                                f"This step: {step.description}\n\n{evidence_text}\n\n"
+                                f"Earlier tool results:\n{prior}"
+                            ),
+                        ),
+                    ],
+                    json_schema=schema,
+                    state=state,
                 ),
-                ChatMessage(
-                    role="user",
-                    content=(
-                        f"Question: {state['user_input']}\n"
-                        f"This step: {step.description}\n\n{evidence_text}\n\n"
-                        f"Earlier tool results:\n{prior}"
-                    ),
-                ),
-            ],
-            json_schema=schema,
-            state=state,
-        )
+                timeout=self.arg_binding_timeout_s,
+            )
+        except TimeoutError:
+            return {}, (
+                f"could not produce arguments for '{spec.name}' within "
+                f"{self.arg_binding_timeout_s:.0f}s"
+            )
+
         try:
             bound = json.loads(result.text)
         except json.JSONDecodeError:
@@ -512,6 +534,114 @@ class AgentRunner:
         if "_missing" in bound:
             return {}, f"required input not found in the sources: {bound['_missing']}"
         return bound, None
+
+
+    async def _await_approval(
+        self, state: AgentState, step: PlanStep
+    ) -> AsyncIterator[tuple[TraceEvent | None, bool | None]]:
+        """Pause the run until a person decides, or until the wait expires.
+
+        Yields (event, decision). The decision is True for approved, False for
+        refused, and None when nobody answered in time — in which case the
+        request stays pending and the run reports honestly that it is waiting,
+        rather than pretending it finished.
+        """
+        from workbench.agent.approval import ApprovalRequest
+
+        summary = {
+            "tool": step.tool,
+            "description": step.description,
+            "arguments": self.tools._summarise_args_dict(step.args)
+            if hasattr(self.tools, "_summarise_args_dict")
+            else step.args,
+            "question": state["user_input"][:400],
+        }
+
+        approval = await self.approval_gate.request(
+            run_id=state["run_id"],
+            step_id=step.id,
+            principal=state["principal"],
+            request=ApprovalRequest(
+                kind="tool",
+                subject_type="tool",
+                subject_id=step.tool or "",
+                summary=summary,
+                reason=f"{step.tool} requires approval before it runs",
+            ),
+        )
+
+        state["approval"] = {"id": approval.id, "tool": step.tool, "status": "pending"}
+        yield (
+            TraceEvent(
+                EventName.APPROVAL_REQUIRED,
+                {
+                    "approval_id": approval.id,
+                    "kind": "tool",
+                    "tool": step.tool,
+                    "summary": summary,
+                    "expires_at": approval.expires_at.isoformat() if approval.expires_at else None,
+                    "waiting_s": self.approval_wait_s,
+                },
+            ),
+            None,
+        )
+
+        import asyncio
+
+        from workbench.db.models import ApprovalStatus
+
+        deadline = time.monotonic() + self.approval_wait_s
+        while time.monotonic() < deadline:
+            await asyncio.sleep(2.0)
+            current = await self.approval_gate.status(approval.id)
+            if current is None or current.status == ApprovalStatus.PENDING:
+                continue
+            approved = current.status == ApprovalStatus.APPROVED
+            state["approval"] = {
+                "id": approval.id,
+                "tool": step.tool,
+                "status": current.status,
+                "decided_by": current.decided_by,
+                "decided_by_username": await self._approver_name(current.decided_by),
+                "decided_at": current.decided_at.isoformat() if current.decided_at else None,
+            }
+            yield (
+                TraceEvent(
+                    EventName.APPROVAL_REQUIRED,
+                    {
+                        "approval_id": approval.id,
+                        "status": current.status,
+                        "approved": approved,
+                        "comment": current.comment,
+                    },
+                ),
+                approved,
+            )
+            return
+
+        yield (None, None)
+
+    async def _approver_name(self, user_id: str | None) -> str | None:
+        """Resolve an approver's username for the provenance block.
+
+        A user id in a document nobody can look up is not a record of who
+        approved it.
+        """
+        if not user_id:
+            return None
+        try:
+            from sqlalchemy import select
+
+            from workbench.db.models import User
+            from workbench.db.session import get_session_factory
+
+            async with get_session_factory()() as session:
+                user = (
+                    await session.execute(select(User).where(User.id == user_id))
+                ).scalar_one_or_none()
+                return (user.full_name or user.username) if user else user_id
+        except Exception:  # noqa: BLE001 - provenance must not fail the run
+            return user_id
 
     async def _act(self, state: AgentState, step: PlanStep) -> AsyncIterator[TraceEvent]:
         if not step.tool:
@@ -529,11 +659,34 @@ class AgentRunner:
             )
             return
         step.args = bound_args
+
+        # --- the human gate ---
+        # Whether approval is needed comes from the tool spec and policy, never
+        # from the model. It is not asked, so it cannot talk its way past.
+        if self.tools.requires_approval(step.tool) and self.approval_gate is not None:
+            decision = None
+            async for event, decision in self._await_approval(state, step):
+                if event is not None:
+                    yield event
+            if decision is not True:
+                note = (
+                    "the request was refused by an approver"
+                    if decision is False
+                    else "the request is still waiting for an approver"
+                )
+                state["scratchpad"].append({"tool": step.tool, "ok": False, "error": note})
+                state["status"] = "awaiting_approval" if decision is None else "running"
+                yield TraceEvent(
+                    EventName.TOOL_RESULT,
+                    {"tool": step.tool, "ok": False, "error": note},
+                )
+                return
         ctx = ToolContext(
             principal=state["principal"],
             run_id=state["run_id"],
             step_id=step.id,
             deadline=budget.deadline,
+            run_context=self._run_context(state),
         )
 
         collected: list[TraceEvent] = []
@@ -575,6 +728,35 @@ class AgentRunner:
                 "error": result.error,
             }
         )
+
+    @staticmethod
+    def _run_context(state: AgentState) -> dict[str, Any]:
+        """What the run has established, for the provenance block.
+
+        The evidence actually retrieved, the models actually routed to, and the
+        approver if one has already decided — all taken from the run's own
+        record rather than asked of the model.
+        """
+        models: dict[str, str] = {}
+        for decision in state.get("route_decisions") or []:
+            logical = str(decision.get("model", ""))
+            physical = str(decision.get("physical_model", ""))
+            if logical:
+                models[logical] = physical
+
+        approval = state.get("approval") or {}
+        return {
+            "models": models,
+            # Every retrieved passage becomes a numbered source, so a document
+            # the answer leaned on appears even if the model forgot to cite it.
+            "citations": [
+                item.to_citation(index)
+                for index, item in enumerate(state.get("evidence") or [], start=1)
+            ],
+            "tools": [record.get("tool", "") for record in state.get("tool_results") or []],
+            "approved_by": approval.get("decided_by_username"),
+            "approved_at": approval.get("decided_at"),
+        }
 
     @staticmethod
     def _compact(data: Any) -> Any:

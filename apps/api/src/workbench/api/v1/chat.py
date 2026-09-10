@@ -57,6 +57,7 @@ def build_runner(request: Request) -> AgentRunner:
         tools=state.tools,
         retriever=getattr(state, "retriever", None),
         residency=state.residency,
+        approval_gate=getattr(state, "approval_gate", None),
     )
 
 
@@ -90,6 +91,10 @@ async def chat_stream(
         seq = 0
         citations: list[dict[str, Any]] = []
         status = "succeeded"
+        # The gate decides before the tool runs, so an artifact produced after
+        # an approval in this run is already approved — it should not sit in
+        # the queue a second time asking about the same decision.
+        approved_in_run = False
 
         try:
             async for event in runner.run(
@@ -105,6 +110,14 @@ async def chat_stream(
                 seq += 1
                 if event.name == EventName.CITATION:
                     citations.append(event.data)
+                elif event.name == EventName.APPROVAL_REQUIRED:
+                    if event.data.get("approved") is True:
+                        approved_in_run = True
+                elif event.name == EventName.ARTIFACT_CREATED:
+                    await _persist_artifact(
+                        event.data, run_id=run_id, conversation_id=conversation_id,
+                        principal=principal, approved=approved_in_run,
+                    )
                 elif event.name == EventName.RUN_FINISHED:
                     status = event.data.get("status", "succeeded")
                 yield format_sse(event.name, event.data, seq=seq)
@@ -155,3 +168,54 @@ async def replay_events(
         media_type="text/event-stream",
         headers=SSE_HEADERS,
     )
+
+
+async def _persist_artifact(
+    payload: dict[str, Any],
+    *,
+    run_id: str,
+    conversation_id: str,
+    principal: Principal,
+    approved: bool = False,
+) -> None:
+    """Record a generated artifact so it outlives the stream.
+
+    Written on its own session: the request transaction may still be streaming,
+    and an artifact that exists on disk but has no row is invisible to the
+    approval queue and undownloadable.
+    """
+    from sqlalchemy import select
+
+    from workbench.db.models import Artifact, ArtifactStatus
+    from workbench.db.session import session_scope
+
+    sha256 = str(payload.get("sha256") or "")
+    if not sha256:
+        return
+
+    try:
+        async with session_scope() as session:
+            existing = (
+                await session.execute(select(Artifact).where(Artifact.sha256 == sha256))
+            ).scalar_one_or_none()
+            if existing is not None:
+                return
+            session.add(
+                Artifact(
+                    run_id=run_id,
+                    conversation_id=conversation_id,
+                    created_by=principal.user_id,
+                    kind=str(payload.get("kind", "")),
+                    filename=str(payload.get("filename", "")),
+                    mime=str(payload.get("mime", "")),
+                    sha256=sha256,
+                    size_bytes=int(payload.get("size_bytes", 0)),
+                    storage_path="",
+                    provenance=dict(payload.get("provenance") or {}),
+                    status=(
+                        ArtifactStatus.APPROVED if approved else ArtifactStatus.PENDING_APPROVAL
+                    ),
+                )
+            )
+    except Exception as exc:  # noqa: BLE001 - must not break the response stream
+        log.error("artifact_persist_failed", sha256=sha256[:12], error=str(exc))
