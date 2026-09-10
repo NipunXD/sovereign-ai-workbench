@@ -83,6 +83,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     app.state.events = get_event_bus()
 
+    # --- tools ---
+    # Registered here rather than discovered by import side effect, so the set
+    # of things the agent can do is visible in one place.
+    from workbench.tools.calc import EngineeringCalcTool
+    from workbench.tools.registry import ToolRegistry
+
+    tools = ToolRegistry(settings.tools_config)
+    tools.register_all(EngineeringCalcTool())
+    app.state.tools = tools
+
     # --- database ---
     try:
         from workbench.db.session import dispose_engine, init_engine
@@ -106,6 +116,35 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except Exception as exc:  # noqa: BLE001
         log.warning("model_availability_probe_failed", error=str(exc))
 
+    # --- retrieval ---
+    # Optional: the service still serves chat and health without a vector store,
+    # which is what an operator needs in order to diagnose one that is down.
+    try:
+        from workbench.rag.embedder import Embedder
+        from workbench.rag.retriever import HybridRetriever
+        from workbench.rag.vectorstore.qdrant_store import QdrantStore
+
+        embed_model = registry.get_model("embed.primary")
+        embedder = Embedder(registry.provider_for("embed.primary"), embed_model)
+        store = QdrantStore(settings.qdrant_url, embedder.collection)
+        await store.ensure_collection(embedder.dimensions)
+
+        session_factory = None
+        if app.state.db_ready:
+            from workbench.db.session import get_session_factory
+
+            session_factory = get_session_factory()
+
+        app.state.retriever = HybridRetriever(
+            embedder=embedder, vector_store=store, session_factory=session_factory
+        )
+        app.state.vector_store = store
+        log.info("retrieval_ready", collection=embedder.collection, dimensions=embedder.dimensions)
+    except Exception as exc:  # noqa: BLE001
+        app.state.retriever = None
+        app.state.vector_store = None
+        log.warning("retrieval_unavailable", error=str(exc))
+
     log.info(
         "workbench_started",
         version=__version__,
@@ -125,6 +164,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
     await registry.aclose()
+    if getattr(app.state, "vector_store", None) is not None:
+        await app.state.vector_store.aclose()
     if app.state.db_ready:
         from workbench.db.session import dispose_engine
 
@@ -197,9 +238,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             media_type="application/problem+json",
         )
 
-    from workbench.api.v1 import health
+    from workbench.api.v1 import auth, chat, health
 
     app.include_router(health.router, prefix="/api/v1")
+    app.include_router(auth.router, prefix="/api/v1")
+    app.include_router(chat.router, prefix="/api/v1")
 
     return app
 

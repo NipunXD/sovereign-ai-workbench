@@ -50,7 +50,14 @@ class ChainReport:
 
 
 class AuditLogger:
-    """Appends to the audit chain."""
+    """Appends to the audit chain.
+
+    Most records ride along in the request's transaction. Security *denials*
+    must not: a rejected login raises, the request transaction rolls back, and
+    the audit row would vanish with it — losing precisely the events a reviewer
+    cares about most. Those are written on an independent connection that
+    commits on its own.
+    """
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -150,17 +157,35 @@ class AuditLogger:
             )
         return event
 
-    async def deny(self, action: str, *, reason: str, **kwargs: Any) -> AuditEvent:
-        """Record a refused action."""
+    async def deny(self, action: str, *, reason: str, **kwargs: Any) -> AuditEvent | None:
+        """Record a refused action, durably.
+
+        Written on its own connection and committed immediately, because the
+        caller is about to raise and roll the request transaction back. A failed
+        login that leaves no trace is worse than no audit log at all — it looks
+        like nothing happened.
+        """
         kwargs.pop("decision", None)
-        kwargs.pop("severity", None)
-        return await self.log(
-            action,
-            decision=AuditDecision.DENY,
-            reason=reason,
-            severity=Severity.WARNING,
-            **kwargs,
-        )
+        severity = kwargs.pop("severity", Severity.WARNING)
+
+        from workbench.db.session import get_session_factory
+
+        try:
+            factory = get_session_factory()
+        except RuntimeError:
+            # No engine (tests, or a database that failed to initialise). Fall
+            # back to the request session so the record is at least attempted.
+            return await self.log(
+                action, decision=AuditDecision.DENY, reason=reason, severity=severity, **kwargs
+            )
+
+        async with factory() as independent:
+            logger = AuditLogger(independent)
+            event = await logger.log(
+                action, decision=AuditDecision.DENY, reason=reason, severity=severity, **kwargs
+            )
+            await independent.commit()
+            return event
 
 
 async def verify_chain(

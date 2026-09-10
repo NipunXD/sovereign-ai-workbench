@@ -641,6 +641,18 @@ class AgentRunner:
         for citation in resolved.citations:
             yield TraceEvent(EventName.CITATION, citation.as_dict())
 
+        # The canonical answer. Everything streamed as `token` still carries raw
+        # [[cite:...]] markers, because a marker cannot be renumbered until the
+        # text around it exists.
+        yield TraceEvent(
+            EventName.ANSWER,
+            {
+                "text": resolved.text,
+                "citations": [c.as_dict() for c in resolved.citations],
+                "unresolved": resolved.unresolved,
+            },
+        )
+
         report = await self._validate(state, resolved)
         state["validation"] = report
         state["status"] = "succeeded"

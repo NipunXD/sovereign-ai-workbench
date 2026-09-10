@@ -39,6 +39,10 @@ class EventName:
     #: The model's internal monologue, on a separate channel so it can never be
     #: mistaken for the answer.
     REASONING = "reasoning"
+    #: The complete answer with citation markers resolved to [1], [2].
+    #: Citation markers span sentences, so they can only be rewritten once the
+    #: whole text exists — the UI renders tokens live and swaps this in at the end.
+    ANSWER = "answer"
     CITATION = "citation"
     ARTIFACT_CREATED = "artifact_created"
     VALIDATION = "validation"
