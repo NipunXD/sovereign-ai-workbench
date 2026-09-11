@@ -200,13 +200,56 @@ export interface PlanStep {
   done: boolean;
 }
 
+/** A plan step with what the run has since done about it. */
+export interface StepProgress extends PlanStep {
+  state: "pending" | "active" | "done";
+  startedAt?: number;
+  finishedAt?: number;
+}
+
 export interface RetrievalHit {
   chunk_id: string;
+  doc_id: string;
   doc_title: string;
   page: number;
   score: number;
   method: string;
   confidence: number;
+  bbox: BBox;
+  section_path: string[];
+  snippet: string;
+}
+
+/** A document the run asked for, as it exists once the tool has produced it. */
+export interface GeneratedArtifact {
+  artifact_id: string;
+  filename: string;
+  kind: string;
+  mime: string;
+  sha256: string;
+  size_bytes: number;
+  download_url: string;
+  provenance: ArtifactProvenance;
+}
+
+/**
+ * The human gate, as seen from the chat.
+ *
+ * `pending` is the state the person asking actually needs to notice: the run
+ * has stopped and is waiting on somebody else. Everything about this shape is
+ * in service of making that unmissable rather than a line in the trace.
+ */
+export interface ApprovalState {
+  approval_id: string;
+  tool: string;
+  status: "pending" | "approved" | "rejected" | "expired";
+  requested_at: number;
+  expires_at: string | null;
+  /** How long the run itself will wait before carrying on without a decision. */
+  waiting_s: number;
+  decided_by: string | null;
+  decided_at: string | null;
+  comment: string | null;
 }
 
 export interface ValidationReport {
@@ -227,6 +270,8 @@ export type TraceItem =
   | { kind: "retrieval"; at: number; query: string; hits: RetrievalHit[]; total: number }
   | { kind: "tool"; at: number; tool: string; args?: Record<string, unknown>; ok?: boolean; error?: string; metrics?: Record<string, unknown> }
   | { kind: "validation"; at: number; data: ValidationReport }
+  | { kind: "artifact"; at: number; artifact: GeneratedArtifact }
+  | { kind: "approval"; at: number; approval: ApprovalState }
   | { kind: "error"; at: number; code: string; message: string; recoverable: boolean };
 
 export interface RunSummary {

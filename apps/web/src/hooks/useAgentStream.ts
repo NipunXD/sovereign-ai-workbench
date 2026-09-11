@@ -4,7 +4,15 @@ import { useCallback, useRef } from "react";
 
 import { getAccessToken } from "@/lib/api";
 import { streamRequest } from "@/lib/sse";
-import type { Citation, PlanStep, RouteDecision, RunSummary, ValidationReport } from "@/lib/types";
+import type {
+  ApprovalState,
+  Citation,
+  GeneratedArtifact,
+  PlanStep,
+  RouteDecision,
+  RunSummary,
+  ValidationReport,
+} from "@/lib/types";
 import { useRun } from "@/stores/run";
 
 /** How long silence has to last before the stream is treated as dead.
@@ -73,6 +81,9 @@ export function useAgentStream() {
         summary: null,
         status: "done",
         limitations: [],
+        steps: [],
+        artifacts: [],
+        approval: null,
         startedAt: Date.now(),
       });
       store.append({
@@ -86,6 +97,9 @@ export function useAgentStream() {
         summary: null,
         status: "streaming",
         limitations: [],
+        steps: [],
+        artifacts: [],
+        approval: null,
         startedAt: Date.now(),
       });
       store.setRunning(true);
@@ -145,16 +159,15 @@ export function useAgentStream() {
               run.addTrace({ kind: "route", at, data: payload as unknown as RouteDecision });
               break;
 
-            case "plan_created":
-              run.addTrace({
-                kind: "plan",
-                at,
-                steps: (payload.steps ?? []) as PlanStep[],
-                rationale: String(payload.rationale ?? ""),
-              });
+            case "plan_created": {
+              const steps = (payload.steps ?? []) as PlanStep[];
+              run.setPlan(steps);
+              run.addTrace({ kind: "plan", at, steps, rationale: String(payload.rationale ?? "") });
               break;
+            }
 
             case "step_started":
+              run.markStep(String(payload.step_id ?? ""), "active", at);
               run.addTrace({
                 kind: "step",
                 at,
@@ -163,6 +176,41 @@ export function useAgentStream() {
                 description: String(payload.description ?? ""),
               });
               break;
+
+            case "step_finished":
+              run.markStep(String(payload.step_id ?? ""), "done", at);
+              break;
+
+            case "artifact_created": {
+              // A produced document is a first-class result, not a line in
+              // the trace. It goes on the message as a card.
+              const artifact = payload as unknown as GeneratedArtifact;
+              run.addArtifact(artifact);
+              run.addTrace({ kind: "artifact", at, artifact });
+              break;
+            }
+
+            case "approval_required": {
+              // Two events share this name: the request, and the decision.
+              // Both update one state so the banner moves from "waiting"
+              // to "approved by …" in place rather than stacking.
+              const previous = run.messages.at(-1)?.approval;
+              const status = String(payload.status ?? "pending") as ApprovalState["status"];
+              const approval: ApprovalState = {
+                approval_id: String(payload.approval_id ?? previous?.approval_id ?? ""),
+                tool: String(payload.tool ?? previous?.tool ?? ""),
+                status,
+                requested_at: previous?.requested_at ?? at,
+                expires_at: (payload.expires_at as string | null) ?? previous?.expires_at ?? null,
+                waiting_s: Number(payload.waiting_s ?? previous?.waiting_s ?? 240),
+                decided_by: (payload.decided_by as string | null) ?? null,
+                decided_at: (payload.decided_at as string | null) ?? null,
+                comment: (payload.comment as string | null) ?? null,
+              };
+              run.setApproval(approval);
+              run.addTrace({ kind: "approval", at, approval });
+              break;
+            }
 
             case "retrieval_result":
               run.addTrace({

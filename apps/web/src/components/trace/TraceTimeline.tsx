@@ -6,15 +6,18 @@ import {
   CheckCircle2,
   ClipboardList,
   Database,
+  FileCheck2,
   Route,
   ShieldCheck,
+  UserCheck,
   Wrench,
   XCircle,
 } from "lucide-react";
 
 import { Chip } from "@/components/ui/primitives";
-import { cn, formatDuration } from "@/lib/utils";
+import { cn, formatBytes, formatDuration } from "@/lib/utils";
 import type { TraceItem } from "@/lib/types";
+import { useInspector } from "@/stores/inspector";
 
 /**
  * What the agent actually did.
@@ -69,7 +72,7 @@ function TraceRow({
   const { icon, tone, title, body } = describe(item);
 
   return (
-    <li className="relative flex gap-2.5 px-3 py-2">
+    <li className="animate-fade-in-up relative flex gap-2.5 px-3 py-2">
       {/* The rail connecting steps. Stops at the last one so the timeline has
           an end rather than trailing into nothing. */}
       {!last ? (
@@ -163,20 +166,30 @@ function describe(item: TraceItem): {
           <div className="mt-1 space-y-1">
             <p className="truncate font-mono text-2xs text-fg-subtle">“{item.query}”</p>
             <ul className="space-y-0.5">
-              {item.hits.slice(0, 4).map((hit) => (
-                <li key={hit.chunk_id} className="flex items-center gap-1.5 text-2xs">
-                  <Chip tone={hit.method === "hybrid" ? "accent" : "neutral"}>{hit.method}</Chip>
-                  <span className="min-w-0 flex-1 truncate text-fg-muted">
-                    {hit.doc_title || "untitled"}
-                  </span>
-                  <span className="tnum shrink-0 text-fg-subtle">p{hit.page}</span>
-                  {hit.confidence < 0.85 ? (
-                    <span className="tnum shrink-0 text-warn" title="OCR confidence">
-                      {(hit.confidence * 100).toFixed(0)}%
+              {item.hits.slice(0, 6).map((hit) => (
+                <li key={hit.chunk_id}>
+                  <button
+                    type="button"
+                    onClick={() => useInspector.getState().showHit(hit, null)}
+                    className="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left text-2xs transition-colors hover:bg-surface-raised"
+                    title="Open this passage"
+                  >
+                    <Chip tone={hit.method === "hybrid" ? "accent" : "neutral"}>{hit.method}</Chip>
+                    <span className="min-w-0 flex-1 truncate text-fg-muted">
+                      {hit.doc_title || "untitled"}
                     </span>
-                  ) : null}
+                    <span className="tnum shrink-0 text-fg-subtle">p{hit.page}</span>
+                    {hit.confidence < 0.85 ? (
+                      <span className="tnum shrink-0 text-warn" title="OCR confidence">
+                        {(hit.confidence * 100).toFixed(0)}%
+                      </span>
+                    ) : null}
+                  </button>
                 </li>
               ))}
+              {item.hits.length > 6 ? (
+                <li className="px-1 text-2xs text-fg-subtle">+{item.hits.length - 6} more on the evidence map</li>
+              ) : null}
             </ul>
           </div>
         ),
@@ -237,6 +250,37 @@ function describe(item: TraceItem): {
         ),
       };
     }
+
+    case "artifact":
+      return {
+        icon: <FileCheck2 size={11} />,
+        tone: "border-ok/40 bg-ok/10 text-ok",
+        title: `Produced ${item.artifact.filename}`,
+        body: (
+          <p className="mt-0.5 text-2xs text-fg-subtle">
+            {item.artifact.kind.toUpperCase()} · {formatBytes(item.artifact.size_bytes)} ·{" "}
+            {(item.artifact.provenance.sources ?? []).length} sources
+          </p>
+        ),
+      };
+
+    case "approval":
+      return {
+        icon: <UserCheck size={11} />,
+        tone:
+          item.approval.status === "pending"
+            ? "border-accent/40 bg-accent/10 text-accent"
+            : item.approval.status === "approved"
+              ? "border-ok/40 bg-ok/10 text-ok"
+              : "border-danger/40 bg-danger/10 text-danger",
+        title:
+          item.approval.status === "pending"
+            ? "Waiting for a second person"
+            : `${item.approval.status[0].toUpperCase()}${item.approval.status.slice(1)}${item.approval.decided_by ? ` by ${item.approval.decided_by}` : ""}`,
+        body: (
+          <p className="mt-0.5 font-mono text-2xs text-fg-subtle">{item.approval.tool}</p>
+        ),
+      };
 
     case "error":
       return {

@@ -92,7 +92,21 @@ const config: Config = {
         sidebar: "14rem",
         rail: "3.25rem",
       },
+      boxShadow: {
+        // A soft glow in the accent, for the one thing on screen that is live.
+        "glow-sm": "0 0 0 1px hsl(var(--accent) / 0.35), 0 0 12px hsl(var(--accent) / 0.25)",
+        glow: "0 0 0 1px hsl(var(--accent) / 0.4), 0 0 24px hsl(var(--accent) / 0.3)",
+        card: "0 1px 0 hsl(0 0% 100% / 0.03) inset, 0 8px 24px -12px hsl(222 40% 2% / 0.8)",
+      },
       keyframes: {
+        "fade-in-up": {
+          from: { opacity: "0", transform: "translateY(6px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+        "node-pulse": {
+          "0%, 100%": { opacity: "0.35", transform: "scale(1)" },
+          "50%": { opacity: "0.9", transform: "scale(1.25)" },
+        },
         "pulse-dot": {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.35" },
@@ -107,6 +121,8 @@ const config: Config = {
         },
       },
       animation: {
+        "fade-in-up": "fade-in-up 220ms ease-out both",
+        "node-pulse": "node-pulse 2.4s ease-in-out infinite",
         "pulse-dot": "pulse-dot 1.6s ease-in-out infinite",
         "flash-highlight": "flash-highlight 1.2s ease-out forwards",
         "slide-up": "slide-up 140ms ease-out",

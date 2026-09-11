@@ -17,6 +17,7 @@ from typing import Any, ClassVar
 
 import pytest
 from sqlalchemy import select
+from sqlmodel import col
 
 from workbench.agent.approval import ApprovalGate, ApprovalRequest
 from workbench.agent.deferred import execute_approved
@@ -81,6 +82,16 @@ async def gate(rbac_config_path):
         )
 
     yield ApprovalGate(get_session_factory()), principal
+
+    # Remove what these tests wrote. They ran against the shared dev database,
+    # and pending rows left behind appear in a real approver's queue — and
+    # get picked up by anything that approves "the newest pending request".
+    from sqlalchemy import delete
+
+    from workbench.db.models import Approval
+
+    async with session_scope() as session:
+        await session.execute(delete(Approval).where(col(Approval.run_id) == "run_deferred_test"))
     await dispose_engine()
     set_deterministic(True)
 

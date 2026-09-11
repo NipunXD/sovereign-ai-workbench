@@ -103,7 +103,7 @@
   /* Markdown produced by the model. Constrained deliberately: the answer sits
      in a dense layout and unbounded heading sizes would wreck it. */
   .prose-answer {
-    @apply text-base leading-relaxed text-fg;
+    @apply text-[0.9375rem] leading-[1.65] text-fg;
   }
   .prose-answer > * + * {
     @apply mt-3;
@@ -142,10 +142,73 @@
   .prose-answer th {
     @apply bg-surface-raised font-semibold;
   }
+  .prose-answer table {
+    @apply my-2 overflow-hidden rounded-md;
+  }
+  .prose-answer tbody tr:nth-child(even) {
+    @apply bg-surface/60;
+  }
+  .prose-answer td {
+    @apply tnum;
+  }
   .prose-answer strong {
     @apply font-semibold text-fg;
   }
   .prose-answer a {
     @apply text-accent underline underline-offset-2;
+  }
+}
+
+
+@layer components {
+  /* The evidence map's canvas: a faint dot grid gives the graph a floor to sit
+     on without competing with it. */
+  .evidence-canvas {
+    background-color: hsl(var(--bg));
+    background-image: radial-gradient(hsl(var(--border-strong) / 0.35) 0.8px, transparent 0.8px);
+    background-size: 18px 18px;
+  }
+
+  .node-pulse {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: node-pulse 2.4s ease-in-out infinite;
+  }
+
+  .edge-live {
+    stroke-dasharray: 4 6;
+    animation: edge-dash 1.2s linear infinite;
+  }
+  @keyframes edge-dash {
+    to {
+      stroke-dashoffset: -20;
+    }
+  }
+
+  /* The grounding ring draws itself in on mount. */
+  .ring-grow {
+    transition: stroke-dashoffset 900ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* An assistant turn: a card with a hairline top light, the way instruments
+     on a rack catch the room's light. */
+  .turn-card {
+    @apply rounded-xl border border-border bg-surface/70;
+    box-shadow:
+      0 1px 0 hsl(0 0% 100% / 0.03) inset,
+      0 8px 24px -12px hsl(222 40% 2% / 0.8);
+  }
+
+  .citation-card {
+    animation: fade-in-up 140ms ease-out both;
+  }
+
+  .stepper::-webkit-scrollbar {
+    height: 4px;
+  }
+
+  .passage {
+    font-family: ui-serif, Georgia, "Times New Roman", serif;
+    font-size: 0.875rem;
   }
 }

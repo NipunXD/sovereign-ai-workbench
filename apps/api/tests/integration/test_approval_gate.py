@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import pytest
 from sqlalchemy import select
+from sqlmodel import col
 
 from workbench.agent.approval import ApprovalGate, ApprovalRequest
 from workbench.core.errors import AuthorizationError, ConflictError, NotFoundError
@@ -53,6 +54,15 @@ async def gate(rbac_config_path):
         )
 
     yield ApprovalGate(get_session_factory()), principal
+
+    # These tests run against the shared dev database and every pending row
+    # they leave behind shows up in a real approver's queue. Remove them.
+    from sqlalchemy import delete
+
+    from workbench.db.models import Approval
+
+    async with session_scope() as session:
+        await session.execute(delete(Approval).where(col(Approval.run_id).like("run_test_%")))
     await dispose_engine()
     set_deterministic(True)
 

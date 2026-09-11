@@ -545,8 +545,15 @@ class AgentRunner:
                     "hits": [
                         {
                             "chunk_id": item.chunk_id,
+                            # The document id travels with every hit, cited or
+                            # not, so the evidence map can open a document the
+                            # answer read but did not end up citing.
+                            "doc_id": item.doc_id,
                             "doc_title": item.doc_title,
                             "page": item.page_from,
+                            "bbox": item.bbox.as_dict(),
+                            "section_path": list(item.section_path),
+                            "snippet": item.text.strip().replace("\n", " ")[:240],
                             "score": round(item.score, 4),
                             "method": item.retrieval_method,
                             "confidence": round(item.confidence, 3),
@@ -823,6 +830,10 @@ class AgentRunner:
                         "status": current.status,
                         "approved": approved,
                         "comment": current.comment,
+                        # Named, so the chat can say who decided rather than
+                        # only that someone did.
+                        "decided_by": (state.get("approval") or {}).get("decided_by_username"),
+                        "decided_at": (state.get("approval") or {}).get("decided_at"),
                     },
                 ),
                 approved,
