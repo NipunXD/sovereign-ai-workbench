@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { ChatWorkspace } from "@/components/chat/ChatWorkspace";
@@ -7,6 +8,7 @@ import { useRun } from "@/stores/run";
 
 /** A new conversation. The first run names it and the URL follows. */
 export default function NewChatPage() {
+  const router = useRouter();
   const reset = useRun((s) => s.reset);
   const conversationId = useRun((s) => s.conversationId);
   const running = useRun((s) => s.running);
@@ -18,6 +20,15 @@ export default function NewChatPage() {
     if (conversationId && !running) reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The first run names the conversation; the address bar follows, so a
+  // refresh or a shared link comes back to the same saved session. Only this
+  // page steers the URL — the saved-session page doing the same thing while
+  // it was still loading the *other* conversation made the two fight, and
+  // the screen flipped between them.
+  useEffect(() => {
+    if (conversationId) router.replace(`/chat/${conversationId}`);
+  }, [conversationId, router]);
 
   return <ChatWorkspace />;
 }

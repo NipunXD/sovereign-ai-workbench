@@ -1,7 +1,6 @@
 "use client";
 
 import { ArrowUp, Square } from "lucide-react";
-import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { Answer, CitationList } from "@/components/chat/Answer";
@@ -19,20 +18,10 @@ import { useInspector } from "@/stores/inspector";
 import { useRun, type ChatMessage } from "@/stores/run";
 
 export function ChatWorkspace() {
-  const { messages, running, thinking, conversationId } = useRun();
+  const { messages, running, thinking } = useRun();
   const { send, cancel } = useAgentStream();
   const setTab = useInspector((s) => s.setTab);
-  const router = useRouter();
-  const pathname = usePathname();
 
-  // The first run of a new chat is what names the conversation. Once it has
-  // an id, the address bar gets it too, so a refresh or a shared link comes
-  // back to the same saved session rather than a blank one.
-  useEffect(() => {
-    if (conversationId && !pathname.includes(conversationId)) {
-      router.replace(`/chat/${conversationId}`);
-    }
-  }, [conversationId, pathname, router]);
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);

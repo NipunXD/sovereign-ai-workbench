@@ -35,14 +35,16 @@ export default function SavedChatPage() {
     if (detail.data && needsLoad && !running) hydrateConversation(detail.data);
   }, [detail.data, needsLoad, running]);
 
-  if (needsLoad && detail.isLoading) {
+  if (needsLoad && !detail.isError) {
+    // Cached data can arrive before the hydration effect has run; showing
+    // the workspace in that gap would flash the previous conversation.
     return (
       <div className="flex h-full items-center justify-center gap-2 text-xs text-fg-subtle">
         <Spinner /> Opening the conversation…
       </div>
     );
   }
-  if (needsLoad && detail.isError) {
+  if (detail.isError) {
     return (
       <EmptyState
         title="No such conversation"
