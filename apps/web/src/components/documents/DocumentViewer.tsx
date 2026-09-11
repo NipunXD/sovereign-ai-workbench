@@ -5,7 +5,8 @@ import { ChevronLeft, ChevronRight, ScanLine, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button, Chip, Spinner } from "@/components/ui/primitives";
-import { api, fetchPageImage } from "@/lib/api";
+import { PageTranscript } from "@/components/documents/PageTranscript";
+import { ApiError, api, fetchPageImage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { BBox } from "@/lib/types";
 import { useViewer } from "@/stores/viewer";
@@ -21,7 +22,12 @@ import { useViewer } from "@/stores/viewer";
  */
 export function DocumentViewer() {
   const { docId, page, activeCitation, flashToken, setPage, close } = useViewer();
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  // Three outcomes, not two. `null` used to mean both "still fetching" and
+  // "there is no image", so a source that never had a page render — a
+  // spreadsheet — sat under a spinner that could never resolve.
+  const [image, setImage] = useState<
+    { status: "loading" } | { status: "ready"; url: string } | { status: "none" } | { status: "error"; message: string }
+  >({ status: "loading" });
   const [rendered, setRendered] = useState({ width: 0, height: 0 });
   const [showBlocks, setShowBlocks] = useState(false);
   const imageRef = useRef<HTMLImageElement>(null);
@@ -45,7 +51,7 @@ export function DocumentViewer() {
     let revoked: string | null = null;
     let cancelled = false;
 
-    setImageUrl(null);
+    setImage({ status: "loading" });
     fetchPageImage(docId, page)
       .then((url) => {
         if (cancelled) {
@@ -53,9 +59,18 @@ export function DocumentViewer() {
           return;
         }
         revoked = url;
-        setImageUrl(url);
+        setImage({ status: "ready", url });
       })
-      .catch(() => setImageUrl(null));
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        // 404 is the ordinary case for a source with no page to render, not a
+        // failure; anything else is one, and says so.
+        setImage(
+          error instanceof ApiError && error.status === 404
+            ? { status: "none" }
+            : { status: "error", message: error instanceof Error ? error.message : "The page could not be loaded." },
+        );
+      });
 
     return () => {
       cancelled = true;
@@ -73,7 +88,7 @@ export function DocumentViewer() {
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [imageUrl]);
+  }, [image]);
 
   const highlight = useMemo(() => {
     if (!activeCitation || activeCitation.page_no !== page) return null;
@@ -107,6 +122,7 @@ export function DocumentViewer() {
         <p className="min-w-0 flex-1 truncate text-xs font-medium" title={document?.title}>
           {document?.title ?? "Loading…"}
         </p>
+        {image.status === "ready" ? (
         <button
           type="button"
           onClick={() => setShowBlocks((value) => !value)}
@@ -118,6 +134,7 @@ export function DocumentViewer() {
         >
           regions
         </button>
+        ) : null}
         <button
           type="button"
           onClick={close}
@@ -128,8 +145,16 @@ export function DocumentViewer() {
       </div>
 
       <div className="flex min-h-0 flex-1 items-start justify-center overflow-auto bg-bg p-3">
+        {image.status === "none" ? (
+          <PageTranscript blocks={blocks?.blocks ?? []} citation={activeCitation} page={page} />
+        ) : image.status === "error" ? (
+          <div className="max-w-sm rounded-lg border border-danger/40 bg-danger/[0.08] px-3 py-2.5 text-xs leading-relaxed text-danger">
+            <span className="font-semibold">This page could not be loaded. </span>
+            {image.message}
+          </div>
+        ) : (
         <div className="relative inline-block shadow-lg">
-          {imageUrl ? (
+          {image.status === "ready" ? (
             // A plain <img>, not next/image. The page renders are served by
             // this system's own API and the citation overlay is positioned
             // against the element's natural box; next/image would route them
@@ -139,7 +164,7 @@ export function DocumentViewer() {
             // eslint-disable-next-line @next/next/no-img-element
             <img
               ref={imageRef}
-              src={imageUrl}
+              src={image.url}
               alt={`Page ${page}`}
               className="block max-w-full rounded-sm"
             />
@@ -176,6 +201,7 @@ export function DocumentViewer() {
             />
           ) : null}
         </div>
+        )}
       </div>
 
       <div className="flex h-9 shrink-0 items-center gap-2 border-t border-border px-2">
@@ -205,8 +231,8 @@ export function DocumentViewer() {
               {blocks.blocks.length} regions · {(blocks.mean_confidence * 100).toFixed(0)}%
             </Chip>
           ) : null}
-          {activeCitation && !highlight ? (
-            <Chip tone="warn" >no region recorded</Chip>
+          {activeCitation && !highlight && image.status === "ready" ? (
+            <Chip tone="warn">no region recorded</Chip>
           ) : null}
         </div>
       </div>
