@@ -219,3 +219,298 @@ questions and never change them again.
 | Upload appears stuck | Native files are seconds; the scanned permit takes ~1 min for the vision call. Say so while it runs |
 | Approval doesn't resume | Refresh the requester's tab — the run is stored, not lost. That *is* the feature |
 | Judge asks something not in the corpus | Perfect. Type it in. It will decline, and that is beat 3 |
+
+---
+---
+
+# 8 · The flows, click by click
+
+What to click, what appears, what to say. Durations assume the models are
+already warm.
+
+## Roles, as actually seeded
+
+| User | Clearance | Can | Cannot |
+|---|---|---|---|
+| `senior` | restricted | chat, generate documents, run code, ingest, classify | **approve** |
+| `engineer` | confidential | chat, generate, ingest | run code, approve |
+| `approver` | confidential | chat, **approve** | **generate** |
+| `viewer` | internal | chat, read documents | everything else |
+| `auditor` | internal | **read the audit log**, read documents | **chat** — no workbench at all |
+
+The separation is real: `senior` cannot approve their own work, and `approver`
+cannot produce the thing they approve.
+
+---
+
+## Flow 0 — Two windows (do this before you start)
+
+The approval beat needs two people signed in at once.
+
+1. Window 1, normal: sign in as `senior`. Put it on the projector.
+2. Window 2, **private/incognito** (sessions are per-browser-profile): sign in
+   as `approver`. Keep it behind, or on a second monitor.
+
+Do not try to do this by signing out and back in — you lose the run on screen,
+and the whole point is that the requester watches it resume.
+
+---
+
+## Flow 1 — Sign-in page · 20s
+
+**Where:** `localhost:3000/login`, before you log in.
+
+1. Leave it on screen while people settle.
+2. Point at the six-stage strip: *"Understand, plan, retrieve, tools, validate,
+   deliver. That is the actual pipeline — you'll watch it run in a minute."*
+3. Point at the five role cards and the coloured clearance edge: *"Five roles,
+   and they deliberately cannot do each other's jobs."*
+4. Click **Enter as Senior Inspection Engineer**.
+
+---
+
+## Flow 2 — Sovereignty · 30s
+
+**Where:** header, top right.
+
+1. Click the green **AIR-GAPPED** badge.
+2. A panel drops down listing every host the deployment can reach, plus
+   **External AI services: none**.
+
+> "That isn't a claim in a README. It reads the running process's egress
+> configuration. If an external service appeared in that list this badge turns
+> red. Unplug the network and nothing on this screen changes."
+
+3. Click the **memory chip** next to it (`3.5/14 GB`) to show which models are
+   resident. Close both.
+
+---
+
+## Flow 3 — A grounded run · 2.5 min · ⭐ the core flow
+
+**Where:** Workbench (first icon in the rail).
+
+1. Click the **grounded lookup** suggestion card, or type variant 1A.
+2. Press Enter. **Now stop watching the answer and drive the right-hand panel.**
+
+**While it runs**, narrate the Trace tab top to bottom as each line appears:
+
+| Appears | Say |
+|---|---|
+| `Routed to reasoning` + model chip | "A classifier picked the model. Not hardcoded." |
+| `Planned 3 steps` | "That plan is the agent's, not ours." |
+| `Retrieved 8 passages`, `hybrid` chips | "Hybrid — dense plus sparse, fused. `V-1201` is a token BM25 catches and embeddings blur." |
+| Answer streaming | *(say nothing, let them read)* |
+
+**When it finishes** it switches to **Evidence** by itself.
+
+3. **Hover** a `[1]` chip in the answer → the matching node lights up on the map.
+4. **Hover** a node on the map → every chip citing it lights up in the answer.
+   > "Two views of the same fact. You can move between them with your eyes."
+5. Look at the footer: **grounding ring**, passages read, tool calls, duration.
+   > "That ring is computed by a validator that re-checks every marker against
+   > retrieved evidence and deletes references pointing at nothing."
+
+---
+
+## Flow 4 — Down to the page · 40s (continues Flow 3)
+
+1. **Click** the `[1]` chip. The panel switches to **Source**, showing the full
+   indexed passage with the cited span highlighted.
+2. Click **show the surrounding text** — the chunks either side appear.
+   > "The sentence before the one a model quoted is often the one that changes
+   > its meaning."
+3. Click **Open page** (or the **page** toggle at the top).
+4. The scanned page appears with a **yellow box** around the cited region.
+   > "That box came from the ingester, not the model. The model cannot move it."
+5. Click **regions** in the viewer header — every extracted block is outlined,
+   colour-coded by source (native / OCR / VLM).
+
+---
+
+## Flow 5 — The refusal · 1.5 min
+
+**Where:** same chat.
+
+1. Type variant 3A or 3B.
+2. Say while it runs: *"This is the beat I'd judge us on. In a refinery a
+   confidently wrong number is worse than no number."*
+3. Footer shows the amber **declined — not in the corpus** chip.
+4. Quote the eval: **80% refusal rate, 0% hallucinated citations.**
+
+---
+
+## Flow 6 — Access control · 40s · no model time, do all three
+
+**Where:** Documents, then Retrieval. Sign out, in as `viewer`, repeat.
+
+| | As `senior` | As `viewer` |
+|---|---|---|
+| Documents page | **10 documents** — 5 internal, 4 confidential, 1 restricted | **5 documents** — all internal |
+| Classification bar | four segments | one segment |
+| Retrieval → `turnaround budget 2029` | filter chip reads `classification<=restricted; departments=inspection,process`; top hits are the **Internal Memo** | filter chip reads `classification<=internal; departments=operations`; the memo **does not appear at all** |
+
+1. Documents page as `senior` → point at the corpus strip and classification bar.
+2. Rail → **Retrieval** → search `turnaround budget 2029` → point at the
+   **access filter chip** and the memo in the results.
+3. Sign out → in as `viewer` → same two pages, same query.
+
+> "The memo isn't ranked lower — it was never a candidate. The filter is inside
+> the retrieval query. You cannot prompt-inject your way past a WHERE clause."
+
+4. While you are `viewer`: point at the **rail** — Ingest, Approvals and Audit
+   are simply not there. *"A destination you cannot use is not shown and then
+   refused. It is not shown."*
+
+---
+
+## Flow 7 — Document + the two-person rule · 2 min · needs Flow 0
+
+**Window 1, as `senior`:**
+
+1. Ask variant 4A (or open the saved session that already did).
+2. The run stops on the **approval banner**: *waiting for an approver*.
+   > "The agent stopped itself. A document that leaves the plant needs a second
+   > person."
+3. Rail → **Approvals**. Your own request is there, and it says:
+   *"You raised this request, so it needs a second person."*
+   > "We state the rule rather than hiding the buttons."
+
+**Window 2, as `approver`:**
+
+4. Rail → **Approvals** → the request is in the queue with the question that
+   raised it.
+5. Type a note in the comment box → click **Approve**.
+
+**Back to Window 1:**
+
+6. The banner changes to *approved by M. Devadiga* and **the run resumes on its
+   own**. The document card appears.
+7. Click **Provenance** on the card → who requested, who approved and when,
+   which models, the digest, every source with page numbers and OCR confidence.
+8. Click **Download**, open the .docx: inline `[1]` superscripts in the body, a
+   numbered **Sources** page, and the provenance block.
+   > "That block is written inside the file, so it travels with the document
+   > when someone emails it."
+
+**If you only have one window:** approve first, then open the saved session —
+it replays with the approval already granted. Weaker, but it works.
+
+---
+
+## Flow 8 — Ingest: refuse, then answer · 2 min · ⭐ best ingest beat
+
+**Where:** Workbench, then Ingest, then back.
+
+1. Ask: *"What is the minimum allowable thickness for V-1202?"* → **declines**.
+2. Rail → **Ingest**.
+3. Set **Classification** `confidential`, **Type** `inspection`,
+   **Departments** `inspection`.
+4. Drop `data/demo/INSP-2030-V1202.pdf`. Watch the stage pipeline:
+   sniff → extract → OCR → vision → chunk → embed → index. Seconds.
+5. Rail → **Workbench** → **New** → ask the same question again.
+6. **7.50 mm**, cited, page 1.
+
+> "Not a model trained on your plant — a model that reads your plant's
+> documents, including the one you handed it thirty seconds ago."
+
+---
+
+## Flow 9 — Vision escalation · 90s · handle with care
+
+1. Ingest → drop `data/demo/WP-2030-0912-scanned.pdf`
+   (classification `internal`, type `inspection`).
+2. Watch the **vision** stage. It reports *"re-read 1 page with vision"*.
+   OCR came in at **69%**, under the **72%** gate in `config/ingest.yaml`.
+3. Documents → open it → toggle **regions**: OCR blocks and VLM blocks in
+   different colours.
+
+> "OCR knew it had done a bad job. The page went to a vision model running on
+> Ollama, on this machine."
+
+⚠️ **Show the trace and the regions — not the recovered text.** The VLM reads
+tags wrong on damage this heavy (`V-1202` → `V-1822` in testing). If someone
+reads the page, that is the moment to point at the **OCR nn% — verify** chip:
+*"which is exactly why we surface the confidence and put the original page one
+click away."*
+
+---
+
+## Flow 10 — Conflicting evidence · 2 min · most impressive
+
+1. Ingest both `INSP-2030-V1202.pdf` and `NOTE-2030-V1202.txt`.
+2. Ask: *"What re-inspection interval is recommended for V-1202, and is there
+   any disagreement about it?"*
+3. The report says **12 months**; the note says **4 months** and shows its
+   arithmetic. Both should be cited.
+4. Open the Evidence map — two documents, both feeding the same question.
+
+> "Two documents, one contradiction. It didn't average them and it didn't pick
+> one. That is what an engineer needs."
+
+---
+
+## Flow 11 — Audit · 45s
+
+**Where:** sign in as `auditor`.
+
+1. Point at the **rail first**: there is no Workbench icon. *"Audit reads. It
+   cannot act. The people who act are not the people who review."*
+2. Rail → **Audit log** → click **Verify chain**.
+   > "Every record commits to the hash of the one before it. Altering any
+   > historical row invalidates every hash after it, and this reports the exact
+   > sequence number where it breaks."
+3. Point at **Refused actions — last 24 hours**: *"Denials first. That's the
+   question an auditor actually opens this page to answer."*
+4. Optional: click **Export evidence** — the log downloads as JSONL.
+
+**The flourish:** sign back in as `senior`, go to `/audit` directly. It says
+*"The audit log is not yours to read… this refusal was itself recorded."*
+
+---
+
+## Flow 12 — Models and portability · 45s
+
+**Where:** rail → **System** (as `senior` or `admin`).
+
+1. **Model manifest** — nine models, logical names (`reasoning.primary`,
+   `vision.primary`, `embed.primary`) mapped to backends and physical models.
+   > "Swap qwen for llama by editing a YAML file. No application code changes."
+2. **Backends** — LM Studio and Ollama both live and healthy.
+   > "Two genuinely different runtimes on every multimodal request, so the
+   > provider abstraction is proven continuously, not asserted once."
+3. **Memory budget** — 14 GB, what's resident.
+   > "A cold load costs seconds, so routing prefers a resident model that's
+   > good enough over a marginally better cold one."
+4. **Routing lanes** — the fallback order per lane.
+
+---
+
+## Flow 13 — Saved sessions · 20s · your safety net
+
+**Where:** the Sessions sidebar on the Workbench.
+
+1. Click any earlier session. It replays instantly — answer, trace, evidence
+   map, citations, documents, approval state.
+2. Point out the URL changed to `/chat/<id>`, and the message count in the list.
+
+> "Every run is kept, and only for the person who had it. Another user asking
+> for this conversation by id gets 'not found' — not 'forbidden', because
+> 'forbidden' would confirm it exists."
+
+**This is what you fall back to if a live run misbehaves.** Nothing about a
+replayed session is faked: it is the recorded event stream of a real run,
+replayed through the same code the live stream uses.
+
+---
+
+## Putting it together
+
+**The 10-minute run:** 1 → 2 → 3 → 4 → 6 → 5 → 7 → 11 → close on the numbers.
+
+**If you get 15 minutes:** add 8 and 10 after 7.
+
+**Keep in your pocket for Q&A:** 9 (vision), 12 (portability), 13 (sessions),
+and `make demo` running in a terminal tab.
+
+**Cut first if you're short:** 4 (fold it into 3), 12, 9.
