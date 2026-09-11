@@ -83,7 +83,9 @@ class TestReservedHeadings:
         spec = _to_docx_spec(
             DocxInput(
                 title="Report",
-                sections=[ReportSection(heading="Provenance", body="Something worth keeping.")],
+                sections=[
+                    ReportSection(heading="Provenance", body="Something worth keeping.", sources=[])
+                ],
             )
         )
         text = " ".join(b.text for b in spec.blocks)
@@ -96,7 +98,7 @@ class TestEndToEndMapping:
         spec = _to_docx_spec(
             DocxInput(
                 title="V-1201 Survey",
-                sections=[ReportSection(heading="Survey Results", body=OBSERVED)],
+                sections=[ReportSection(heading="Survey Results", body=OBSERVED, sources=[])],
             )
         )
         for block in spec.blocks:
@@ -163,3 +165,77 @@ class TestNumberedReservedHeadings:
     def test_an_ordinary_numbered_heading_is_untouched(self) -> None:
         assert _safe_heading("3. Thickness Measurements") == "3. Thickness Measurements"
         assert _safe_heading("1. Introduction") == "1. Introduction"
+
+
+class TestSectionSources:
+    """A section that names its sources but carries no inline markers.
+
+    Asked to thread [n] markers through prose while filling a JSON schema
+    under constrained decoding, the model produced none at all on a live run
+    — the references page was numbered and the body pointed at nothing. A
+    list of source numbers per section is something it fills reliably, and
+    it is enough to attribute every section that states a figure.
+    """
+
+    def test_sources_are_attached_to_the_end_of_the_prose(self) -> None:
+        spec = _to_docx_spec(
+            DocxInput(
+                title="R",
+                sections=[
+                    ReportSection(heading="Findings", body="CML-04 is at 9.20 mm.", sources=[2, 1])
+                ],
+            )
+        )
+        paragraph = next(b for b in spec.blocks if b.type == "paragraph")
+        assert paragraph.text == "CML-04 is at 9.20 mm. [1][2]"
+
+    def test_a_table_gets_its_sources_as_a_caption(self) -> None:
+        spec = _to_docx_spec(
+            DocxInput(
+                title="R",
+                sections=[
+                    ReportSection(
+                        heading="Readings",
+                        table_headers=["CML", "mm"],
+                        table_rows=[["CML-04", "9.20"]],
+                        sources=[3],
+                    )
+                ],
+            )
+        )
+        table = next(b for b in spec.blocks if b.type == "table")
+        assert table.caption == "Sources: [3]"
+
+    def test_inline_markers_take_precedence(self) -> None:
+        # The model did the better thing; the trail must not double up.
+        spec = _to_docx_spec(
+            DocxInput(
+                title="R",
+                sections=[
+                    ReportSection(
+                        heading="F", body="9.20 mm [2] against 8.0 mm [1].", sources=[1, 2]
+                    )
+                ],
+            )
+        )
+        paragraph = next(b for b in spec.blocks if b.type == "paragraph")
+        assert paragraph.text == "9.20 mm [2] against 8.0 mm [1]."
+
+    def test_bullets_carry_the_trail_when_there_is_no_table(self) -> None:
+        spec = _to_docx_spec(
+            DocxInput(
+                title="R",
+                sections=[ReportSection(heading="F", bullets=["one", "two"], sources=[4])],
+            )
+        )
+        bullets = next(b for b in spec.blocks if b.type == "bullets")
+        assert bullets.items == ["one", "two [4]"]
+
+    def test_no_sources_means_no_trail(self) -> None:
+        spec = _to_docx_spec(
+            DocxInput(
+                title="R", sections=[ReportSection(heading="F", body="Unattributed.", sources=[])]
+            )
+        )
+        paragraph = next(b for b in spec.blocks if b.type == "paragraph")
+        assert paragraph.text == "Unattributed."

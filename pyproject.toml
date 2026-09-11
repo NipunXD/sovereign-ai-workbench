@@ -47,7 +47,7 @@ ignore = [
 # Engineering notation, not homoglyph smuggling: ρ for density, × for vessel
 # dimensions, − as a typographic minus in measured values. Spelling these as
 # ASCII would make the domain text wrong to read.
-allowed-confusables = ["×", "−", "ρ"]
+allowed-confusables = ["×", "−", "ρ", "›"]  # › separates section-path levels
 
 [tool.ruff.lint.per-file-ignores]
 # ASYNC240: blocking pathlib in an async *test* is not a served-request

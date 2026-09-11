@@ -144,6 +144,18 @@ class ResidencyManager:
             await self._make_room_for(info)
             await self._load(info)
 
+    def forget(self, logical_name: str) -> None:
+        """Drop the record of a model being resident.
+
+        For when the backend says otherwise. LM Studio unloads idle models on
+        its own timer, and this manager only learns of that from a periodic
+        reconciliation — between the two, `acquire()` sees an entry, returns
+        early, and the next request fails with "Model unloaded". Forgetting
+        the entry makes the next `acquire()` load it again.
+        """
+        if self._entries.pop(logical_name, None) is not None:
+            log.info("residency_forgotten", model=logical_name)
+
     async def _make_room_for(self, info: ModelInfo) -> None:
         """Evict least-recently-used models until this one fits."""
         needed = info.approx_ram_gb

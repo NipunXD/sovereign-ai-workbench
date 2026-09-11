@@ -41,6 +41,7 @@ from workbench.agent.state import (
 from workbench.core.event_names import EventName
 from workbench.core.ids import prefixed_id
 from workbench.core.logging import get_logger
+from workbench.providers.errors import ProviderResponseError
 from workbench.providers.types import ChatMessage, GenerationRequest, ImageRef
 from workbench.rag.citations import EvidenceItem, build_evidence_prompt, resolve_markers
 from workbench.router.router import ModelRouter, RouteRequest
@@ -688,7 +689,14 @@ class AgentRunner:
                                 "Take every value from the sources or from earlier tool "
                                 "results. Never invent a number. If a required value is not "
                                 'present, return {"_missing": "what is absent"} instead of '
-                                "guessing.\n\nRespond with JSON matching this schema only."
+                                "guessing.\n\n"
+                                "Cite as you go: after each claim, figure or table cell taken "
+                                "from a source, put [n] where n is the bracketed number at the "
+                                "start of that <source> block. Two sources is [1][2]. Put the "
+                                "marker in the cell or sentence it supports, not once at the "
+                                "end of a section. Cite only numbers that appear in the "
+                                "sources; a number with no source behind it is removed.\n\n"
+                                "Respond with JSON matching this schema only."
                             ),
                         ),
                         ChatMessage(
@@ -1184,17 +1192,31 @@ class AgentRunner:
         """
         info = self.registry.get_model(logical_name)
         provider = self.registry.provider_for(logical_name)
+        request = GenerationRequest(
+            model=info.physical_id,
+            messages=messages,
+            temperature=0.0,
+            json_schema=json_schema,
+            num_ctx=info.default_num_ctx,
+            max_tokens=max_tokens,
+        )
         if self.residency is not None:
             await self.residency.acquire(logical_name)
-        result = await provider.generate(
-            GenerationRequest(
-                model=info.physical_id,
-                messages=messages,
-                temperature=0.0,
-                json_schema=json_schema,
-                num_ctx=info.default_num_ctx,
-                max_tokens=max_tokens,
-            )
-        )
+        try:
+            result = await provider.generate(request)
+        except ProviderResponseError as exc:
+            # LM Studio unloads idle models on its own timer, and residency
+            # only hears about it at the next reconciliation. In between, the
+            # stale entry makes acquire() a no-op and the call fails with
+            # "Model unloaded" — which killed an entire run at its first
+            # model call, on a machine where the model was one load away.
+            # Correct the belief and try exactly once more; a second failure
+            # is a real one.
+            if "model unloaded" not in str(exc).lower() or self.residency is None:
+                raise
+            log.warning("model_unloaded_underneath_us", model=logical_name)
+            self.residency.forget(logical_name)
+            await self.residency.acquire(logical_name)
+            result = await provider.generate(request)
         state["budget"].tokens_used += result.usage.total_tokens
         return result

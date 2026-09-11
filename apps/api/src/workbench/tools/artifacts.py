@@ -58,12 +58,28 @@ class ReportSection(BaseModel):
     """One section of a report. One level of nesting, no more."""
 
     heading: str = Field(description="Section heading")
+    # Required, and declared before the body on purpose. A live run showed
+    # the model producing a full report with no citation of any kind: asked
+    # to thread [n] through prose it wrote none, and an *optional* `sources`
+    # list it simply omitted — under grammar-constrained decoding an optional
+    # key is the shortest path and gets skipped. A required key is generated.
+    # Declaring it before the body means the model names its sources while
+    # the evidence is still in front of it, not after writing 400 words.
+    sources: list[int] = Field(
+        description=(
+            "Source numbers this section draws on: the bracketed numbers at the "
+            "start of the <source> blocks, e.g. [1, 3]. Every section that states "
+            "a figure or a finding must list at least one. An empty list means "
+            "the section states nothing from the sources."
+        ),
+    )
     body: str = Field(
         default="",
         description=(
-            "Prose for this section. Body text cannot contain a table — writing "
-            "'the following table shows...' here without filling table_headers "
-            "and table_rows produces a section that promises a table and has none."
+            "Prose for this section, with a [n] source marker after each claim. Body "
+            "text cannot contain a table — writing 'the following table shows...' "
+            "here without filling table_headers and table_rows produces a section "
+            "that promises a table and has none."
         ),
     )
     bullets: list[str] = Field(default_factory=list, description="Bullet points")
@@ -78,7 +94,8 @@ class ReportSection(BaseModel):
         default_factory=list,
         description=(
             "One list per row, each aligned to table_headers. Include every row "
-            "the sources give; do not summarise a table into a sentence."
+            "the sources give; do not summarise a table into a sentence. A cell "
+            "may carry its own [n] marker, e.g. '9.20 [2]'."
         ),
     )
 
@@ -373,17 +390,46 @@ def _safe_heading(heading: str) -> str:
     return heading
 
 
+def _section_trail(section: ReportSection) -> str:
+    """The markers to attach to a section that carries none inline."""
+    text = " ".join([section.body, *section.bullets, *(c for r in section.table_rows for c in r)])
+    if re.search(r"\[\d{1,2}\]", text):
+        return ""
+    numbers = sorted({n for n in section.sources if isinstance(n, int) and n > 0})
+    return "".join(f"[{n}]" for n in numbers)
+
+
 def _to_docx_spec(args: DocxInput) -> DocxSpec:
     blocks: list[Block] = []
     for section in args.sections:
         blocks.append(Block(type="heading", text=_safe_heading(section.heading), level=1))
-        if section.body:
-            blocks.extend(_body_blocks(section.body))
-        if section.bullets:
-            blocks.append(
-                Block(type="bullets", items=[b for s in section.bullets for b in _lines(s)])
-            )
-        if section.table_headers and section.table_rows:
+
+        # Attribution. Inline [n] markers, when the model wrote them, say
+        # exactly which claim came from where and are left alone. When it
+        # only filled `sources` — which a model under constrained decoding
+        # does far more reliably than threading markers through prose — the
+        # section's sources are attached to the last thing a reader sees in
+        # it, so no section that states a figure goes unattributed.
+        trail = _section_trail(section)
+
+        body_blocks = _body_blocks(section.body) if section.body else []
+        bullet_items = [b for s in section.bullets for b in _lines(s)]
+        has_table = bool(section.table_headers and section.table_rows)
+
+        if trail and not has_table and not bullet_items and body_blocks:
+            last = body_blocks[-1]
+            if last.type == "paragraph":
+                last.text = f"{last.text} {trail}"
+            elif last.items:
+                last.items[-1] = f"{last.items[-1]} {trail}"
+        blocks.extend(body_blocks)
+
+        if bullet_items:
+            if trail and not has_table:
+                bullet_items[-1] = f"{bullet_items[-1]} {trail}"
+            blocks.append(Block(type="bullets", items=bullet_items))
+
+        if has_table:
             blocks.append(
                 Block(
                     type="table",
@@ -391,6 +437,7 @@ def _to_docx_spec(args: DocxInput) -> DocxSpec:
                         section.table_headers,
                         *[[str(c) for c in r] for r in section.table_rows],
                     ],
+                    caption=f"Sources: {trail}" if trail else "",
                 )
             )
     return DocxSpec(

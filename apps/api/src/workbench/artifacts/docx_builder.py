@@ -13,6 +13,7 @@ would otherwise change on every run.
 from __future__ import annotations
 
 import io
+import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -75,10 +76,16 @@ class DocxBuilder:
             subtitle.runs[0].font.size = Pt(11)
             subtitle.runs[0].font.color.rgb = RGBColor(0x60, 0x60, 0x60)
 
+        # Validate every [n] in the content against the numbered sources the
+        # model was shown. An out-of-range number is removed and recorded, on
+        # the same principle as the chat answer: a reference to nothing is
+        # worse than no reference.
+        cited, unresolved = _validate_markers(spec.blocks, len(provenance.citations))
+
         for block in spec.blocks:
             self._render(document, block)
 
-        self._provenance_page(document, provenance)
+        self._provenance_page(document, provenance, cited=cited, unresolved=unresolved)
 
         buffer = io.BytesIO()
         # A fixed creation time under deterministic mode; python-docx would
@@ -95,7 +102,12 @@ class DocxBuilder:
             kind=self.kind,
             filename=self._filename(spec.title),
             sha256=digest_bytes(data),
-            meta={"blocks": len(spec.blocks), "classification": spec.classification},
+            meta={
+                "blocks": len(spec.blocks),
+                "classification": spec.classification,
+                "cited_sources": sorted(cited),
+                "unresolved_markers": unresolved,
+            },
         )
 
     def _render(self, document: Any, block: Block) -> None:
@@ -105,11 +117,11 @@ class DocxBuilder:
             document.add_heading(block.text, level=min(max(block.level, 1), 4))
 
         elif block.type == "paragraph":
-            document.add_paragraph(block.text)
+            _write_with_markers(document.add_paragraph(), block.text)
 
         elif block.type == "bullets":
             for item in block.items:
-                document.add_paragraph(item, style="List Bullet")
+                _write_with_markers(document.add_paragraph(style="List Bullet"), item)
 
         elif block.type == "table" and block.rows:
             columns = max(len(row) for row in block.rows)
@@ -119,7 +131,7 @@ class DocxBuilder:
                 cells = table.add_row().cells
                 for position in range(columns):
                     value = row[position] if position < len(row) else ""
-                    cells[position].text = str(value)
+                    _write_with_markers(cells[position].paragraphs[0], str(value))
                     if index == 0:
                         # The header row must survive a page break, or a table
                         # of readings continues onto page two unlabelled.
@@ -128,8 +140,10 @@ class DocxBuilder:
                                 run.bold = True
             table.rows[0]._tr.get_or_add_trPr().append(_repeat_header_row())
             if block.caption:
-                caption = document.add_paragraph(block.caption)
-                caption.runs[0].font.size = Pt(8)
+                caption = document.add_paragraph()
+                _write_with_markers(caption, block.caption)
+                for run in caption.runs:
+                    run.font.size = Pt(8)
 
         elif block.type == "image" and block.image_ref in self.images:
             document.add_picture(io.BytesIO(self.images[block.image_ref]), width=Inches(6.0))
@@ -140,9 +154,17 @@ class DocxBuilder:
         elif block.type == "pagebreak":
             document.add_page_break()
 
-    def _provenance_page(self, document: Any, provenance: Provenance) -> None:
+    def _provenance_page(
+        self,
+        document: Any,
+        provenance: Provenance,
+        *,
+        cited: set[int] | None = None,
+        unresolved: list[str] | None = None,
+    ) -> None:
         from docx.shared import Pt, RGBColor
 
+        cited = cited or set()
         document.add_page_break()
         document.add_heading("Provenance", level=1)
 
@@ -175,11 +197,45 @@ class DocxBuilder:
                         run.font.size = Pt(8)
 
         document.add_heading("Sources", level=2)
-        source_lines = provenance.source_lines()
-        if source_lines:
-            for line in source_lines:
-                paragraph = document.add_paragraph(line, style="List Number")
-                paragraph.runs[0].font.size = Pt(9)
+        if provenance.citations:
+            # Numbered to match the [n] markers in the body, which is the whole
+            # point: a reader at "9.20 mm [2]" finds "2." here and nowhere
+            # else. The numbers are written literally rather than left to
+            # Word's list numbering, so a source the body never cites keeps
+            # its place and the numbering cannot drift from the markers.
+            intro = document.add_paragraph(
+                "Numbers match the [n] markers in the text above. Sources the "
+                "document read but did not cite are listed as well, marked."
+            )
+            intro.runs[0].font.size = Pt(8)
+            intro.runs[0].italic = True
+            for citation in provenance.citations:
+                paragraph = document.add_paragraph()
+                lead = paragraph.add_run(f"{citation.n}.  ")
+                lead.bold = True
+                lead.font.size = Pt(9)
+                body = paragraph.add_run(_reference_line(citation))
+                body.font.size = Pt(9)
+                if citation.n not in cited:
+                    note = paragraph.add_run("  — retrieved, not cited")
+                    note.font.size = Pt(8)
+                    note.italic = True
+                    note.font.color.rgb = RGBColor(0x80, 0x80, 0x80)
+                if citation.confidence < 0.85:
+                    warn = paragraph.add_run(
+                        f"  [recognised from a scan at {citation.confidence:.0%} confidence — "
+                        f"verify against the original]"
+                    )
+                    warn.font.size = Pt(8)
+                    warn.font.color.rgb = RGBColor(0xB0, 0x50, 0x00)
+            if unresolved:
+                dropped = document.add_paragraph(
+                    f"{len(unresolved)} marker{'s' if len(unresolved) != 1 else ''} "
+                    f"referring to no source ({', '.join(unresolved)}) were removed "
+                    f"from the text."
+                )
+                dropped.runs[0].font.size = Pt(8)
+                dropped.runs[0].font.color.rgb = RGBColor(0xB0, 0x50, 0x00)
         else:
             paragraph = document.add_paragraph(
                 "No documents were cited. This content was not grounded in the indexed corpus."
@@ -193,6 +249,75 @@ class DocxBuilder:
 
         slug = re.sub(r"[^A-Za-z0-9]+", "-", title).strip("-")[:60] or "report"
         return f"{slug}.docx"
+
+
+#: A source marker in document text: [3], or [[3]] when the model doubled the
+#: brackets. Two digits is plenty — a run offers at most a few dozen sources.
+_MARKER = re.compile(r"\[{1,2}\s*(\d{1,2})\s*\]{1,2}")
+
+
+def _validate_markers(blocks: list[Block], source_count: int) -> tuple[set[int], list[str]]:
+    """Check every marker in the content and strip the ones pointing nowhere.
+
+    Mutates the blocks in place so rendering sees clean text. Returns the set
+    of numbers actually cited and the markers that were removed.
+    """
+    cited: set[int] = set()
+    unresolved: list[str] = []
+
+    def clean(text: str) -> str:
+        def replace(match: re.Match[str]) -> str:
+            n = int(match.group(1))
+            if 1 <= n <= source_count:
+                cited.add(n)
+                return f"[{n}]"
+            unresolved.append(match.group(0))
+            return ""
+
+        cleaned = _MARKER.sub(replace, text)
+        # Removing a marker can leave " ." or a double space behind.
+        cleaned = re.sub(r"\s+([.,;:!?])", r"\1", cleaned)
+        return re.sub(r"[ \t]{2,}", " ", cleaned).strip()
+
+    for block in blocks:
+        block.text = clean(block.text)
+        block.items = [clean(item) for item in block.items]
+        block.rows = [[clean(cell) for cell in row] for row in block.rows]
+    return cited, unresolved
+
+
+def _write_with_markers(paragraph: Any, text: str) -> None:
+    """Write text into a paragraph with each [n] as a superscript run.
+
+    A bracketed number inline is what the model produces and what the chat
+    shows; in a printed report the same reference belongs in superscript,
+    the way any technical document does it. The bracket is kept so the marker
+    survives a copy-paste into plain text unambiguously.
+    """
+    from docx.shared import Pt
+
+    position = 0
+    for match in _MARKER.finditer(text):
+        if match.start() > position:
+            paragraph.add_run(text[position : match.start()])
+        marker = paragraph.add_run(f"[{match.group(1)}]")
+        marker.font.superscript = True
+        marker.font.size = Pt(8)
+        position = match.end()
+    if position < len(text):
+        paragraph.add_run(text[position:])
+
+
+def _reference_line(citation: Any) -> str:
+    """One numbered reference: where the passage is, precisely."""
+    parts = [citation.doc_title or citation.doc_id, f"page {citation.page_no}"]
+    if citation.section_path:
+        parts.append(" › ".join(citation.section_path))
+    line = " — ".join(parts)
+    snippet = (citation.snippet or "").strip()
+    if snippet:
+        line += f'. "{snippet[:140]}{"…" if len(snippet) > 140 else ""}"'
+    return line
 
 
 def _repeat_header_row() -> Any:
