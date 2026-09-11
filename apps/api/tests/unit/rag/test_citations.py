@@ -8,6 +8,8 @@ they are.
 
 from __future__ import annotations
 
+import pytest
+
 from workbench.core.ir import BBox
 from workbench.rag.citations import (
     EvidenceItem,
@@ -180,3 +182,155 @@ def test_citation_id_matching_is_case_insensitive() -> None:
 def test_case_insensitivity_does_not_excuse_an_invented_id() -> None:
     result = resolve_markers("A claim [[cite:CHK_DOESNOTEXIST]].", [item("chk_01M25VN9")])
     assert result.unresolved == ["CHK_DOESNOTEXIST"]
+
+
+class TestBracketStyles:
+    """A marker the parser does not recognise is worse than a wrong one.
+
+    Observed: the model wrote `(cite:chk_...)` instead of `[[cite:...]]`. That
+    matched nothing, so the markers were neither resolved nor reported as
+    unresolved — the raw chunk ids stayed in the prose for the reader to see,
+    and the grounding score came out as 0% on an answer that had cited every
+    line. It looked like the model refusing to cite rather than the parser
+    refusing to read.
+    """
+
+    @pytest.fixture
+    def evidence(self) -> list[EvidenceItem]:
+        return [
+            EvidenceItem(
+                chunk_id="chk_a",
+                text="CML-04 measured 9.20 mm",
+                doc_id="d1",
+                doc_title="Inspection Report V-1201 — March 2029",
+                page_from=1,
+            ),
+            EvidenceItem(
+                chunk_id="chk_b",
+                text="Retirement thickness is 8.0 mm",
+                doc_id="d2",
+                doc_title="SOP-4412",
+                page_from=2,
+            ),
+        ]
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "CML-04 is at 9.20 mm [[cite:chk_a]].",
+            "CML-04 is at 9.20 mm [[cite: chk_a ]].",
+            "CML-04 is at 9.20 mm (cite:chk_a).",
+            "CML-04 is at 9.20 mm [cite:chk_a].",
+            "CML-04 is at 9.20 mm (CITE:chk_a).",
+        ],
+    )
+    def test_every_bracket_style_resolves(self, text: str, evidence) -> None:
+        resolved = resolve_markers(text, evidence)
+        assert resolved.text == "CML-04 is at 9.20 mm [1]."
+        assert [c.n for c in resolved.citations] == [1]
+        assert resolved.unresolved == []
+
+    def test_the_parenthesised_form_carries_the_source(self, evidence) -> None:
+        """What the reader actually needs: a title and a page, not a chunk id."""
+        resolved = resolve_markers("The limit is 8.0 mm (cite:chk_b).", evidence)
+        citation = resolved.citations[0]
+        assert citation.doc_title == "SOP-4412"
+        assert citation.page_no == 2
+        assert "8.0 mm" in citation.snippet
+        assert "chk_b" not in resolved.text
+
+    def test_an_unknown_id_is_removed_and_reported(self, evidence) -> None:
+        resolved = resolve_markers("Invented (cite:chk_nope).", evidence)
+        assert "chk_nope" not in resolved.text
+        assert resolved.unresolved == ["chk_nope"]
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "See the site: page 3 of the manual.",
+            "The corrosion rate (0.55 mm/yr) is within limits.",
+            "Readings: [12.50, 9.20] mm.",
+        ],
+    )
+    def test_ordinary_prose_is_not_mistaken_for_a_marker(self, text: str, evidence) -> None:
+        # The looser brackets must not start eating punctuation out of the
+        # answer; a citation parser that edits prose is its own failure.
+        assert resolve_markers(text, evidence).text == text
+
+
+class TestOrdinalReferences:
+    """Citing by the number shown in the source header.
+
+    The prompt carried two numbering schemes at once: every source block is
+    headed `[1] Title — page 4`, and the rules asked for `[[cite:the-id]]`.
+    Shown a number and asked for a 26-character ULID, the model used the
+    number — and a bare `[1]` matched nothing, so an answer citing every line
+    came out with a grounding score of 0% and references pointing at nothing.
+    """
+
+    @pytest.fixture
+    def evidence(self) -> list[EvidenceItem]:
+        return [
+            EvidenceItem(
+                chunk_id="chk_a",
+                text="CML-04 measured 9.20 mm",
+                doc_id="d1",
+                doc_title="Inspection Report V-1201 — March 2029",
+                page_from=1,
+            ),
+            EvidenceItem(
+                chunk_id="chk_b",
+                text="Retirement thickness is 8.0 mm",
+                doc_id="d2",
+                doc_title="SOP-4412",
+                page_from=2,
+            ),
+            EvidenceItem(
+                chunk_id="chk_c",
+                text="P-101A vibration 7.1 mm/s",
+                doc_id="d3",
+                doc_title="Maintenance Activity Log — Q1 2029",
+                page_from=1,
+            ),
+        ]
+
+    def test_a_number_resolves_to_the_source_it_names(self, evidence) -> None:
+        resolved = resolve_markers("CML-04 is at 9.20 mm [1].", evidence)
+        assert resolved.text == "CML-04 is at 9.20 mm [1]."
+        assert resolved.citations[0].doc_title == "Inspection Report V-1201 — March 2029"
+        assert resolved.citations[0].page_no == 1
+
+    def test_doubled_brackets_work_too(self, evidence) -> None:
+        resolved = resolve_markers("Both [[1]][[3]].", evidence)
+        assert resolved.text == "Both [1][2]."
+        assert [c.doc_title for c in resolved.citations] == [
+            "Inspection Report V-1201 — March 2029",
+            "Maintenance Activity Log — Q1 2029",
+        ]
+
+    def test_numbering_follows_first_appearance(self, evidence) -> None:
+        resolved = resolve_markers("First [3], then [1].", evidence)
+        assert resolved.text == "First [1], then [2]."
+        assert resolved.citations[0].doc_title == "Maintenance Activity Log — Q1 2029"
+
+    def test_a_source_that_was_never_offered_is_reported(self, evidence) -> None:
+        resolved = resolve_markers("Invented [9].", evidence)
+        assert "[9]" not in resolved.text
+        assert resolved.unresolved == ["[9]"]
+
+    def test_both_forms_share_one_numbering(self, evidence) -> None:
+        """The two passes used to fight each other.
+
+        Rewriting `[[cite:chk_b]]` to `[1]` and then resolving ordinals re-read
+        that `[1]` as "the first source" — silently repointing a correctly
+        cited claim at a document it never came from.
+        """
+        resolved = resolve_markers("A [[cite:chk_b]] and B [1].", evidence)
+        assert resolved.text == "A [1] and B [2]."
+        assert resolved.citations[0].doc_title == "SOP-4412"
+        assert resolved.citations[1].doc_title == "Inspection Report V-1201 — March 2029"
+
+    def test_a_bracketed_list_of_numbers_is_left_alone(self, evidence) -> None:
+        assert resolve_markers("Readings: [12.50, 9.20] mm.", evidence).text == (
+            "Readings: [12.50, 9.20] mm."
+        )

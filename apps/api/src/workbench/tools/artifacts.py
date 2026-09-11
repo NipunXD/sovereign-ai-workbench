@@ -58,11 +58,28 @@ class ReportSection(BaseModel):
     """One section of a report. One level of nesting, no more."""
 
     heading: str = Field(description="Section heading")
-    body: str = Field(default="", description="Prose for this section")
+    body: str = Field(
+        default="",
+        description=(
+            "Prose for this section. Body text cannot contain a table — writing "
+            "'the following table shows...' here without filling table_headers "
+            "and table_rows produces a section that promises a table and has none."
+        ),
+    )
     bullets: list[str] = Field(default_factory=list, description="Bullet points")
-    table_headers: list[str] = Field(default_factory=list, description="Table column headers")
+    table_headers: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Column headers. Any set of figures belongs here rather than in prose "
+            "— readings per location, values per year, one row per item."
+        ),
+    )
     table_rows: list[list[str]] = Field(
-        default_factory=list, description="Table rows, aligned to table_headers"
+        default_factory=list,
+        description=(
+            "One list per row, each aligned to table_headers. Include every row "
+            "the sources give; do not summarise a table into a sentence."
+        ),
     )
 
 
@@ -193,8 +210,11 @@ class DocxTool(_ArtifactTool):
         description=(
             "Generate a Word report. Provide a title and an ordered list of sections, "
             "each with a heading and any of: body prose, bullets, or a table given as "
-            "headers plus rows. A provenance page listing every source is appended "
-            "automatically."
+            "headers plus rows. Put figures in tables: a reader asked for measurements "
+            "wants the rows, not a sentence describing them. Do not write a "
+            "'Provenance' or 'Sources' section — one listing every source, with pages "
+            "and OCR confidence, is appended automatically and is the authoritative "
+            "record."
         ),
         input_model=DocxInput,
         output_model=ArtifactOutput,
@@ -340,8 +360,15 @@ def _body_blocks(text: str) -> list[Block]:
 
 
 def _safe_heading(heading: str) -> str:
-    """Keep a model-authored section out of the builder's reserved namespace."""
-    if heading.strip().lower().rstrip(":") in RESERVED_HEADINGS:
+    """Keep a model-authored section out of the builder's reserved namespace.
+
+    Numbering is stripped before comparing. A model writing structured reports
+    numbers its sections, so the clash arrives as "7. Provenance" rather than
+    "Provenance" — which slipped straight past an exact match and put a
+    model-authored provenance section directly above the real one.
+    """
+    stripped = re.sub(r"^\s*\d+[.)]?\s*", "", heading.strip()).rstrip(":")
+    if stripped.lower() in RESERVED_HEADINGS:
         return f"{heading.strip().rstrip(':')} (as stated in the answer)"
     return heading
 

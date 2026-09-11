@@ -375,11 +375,54 @@ class AgentRunner:
 
         steps = self._ensure_requested_artifact(steps, state, available)
 
-        if steps[-1].intent is not StepIntent.SYNTHESIZE:
-            steps.append(
-                PlanStep(id="final", intent=StepIntent.SYNTHESIZE, description="Write the answer")
-            )
+        steps = self._synthesis_last(steps)
         return Plan(steps=steps[:6], rationale=str(payload.get("rationale", "")))
+
+    @staticmethod
+    def _synthesis_last(steps: list[PlanStep]) -> list[PlanStep]:
+        """Put every action before the answer, and leave exactly one answer.
+
+        The executor stops at the first synthesize step, because that step *is*
+        the answer and nothing follows it. A planner that emits
+
+            retrieve, retrieve, synthesize, tool:artifact.docx, synthesize
+
+        therefore stranded the tool: the run stopped at step 3, reported "0
+        tool calls", and produced a description of the document instead of the
+        document. The plan looked right in the trace, which is what made it
+        hard to see — the artifact step was there, listed, never reached.
+
+        The prompt already says synthesis is always last. This makes it true
+        rather than hoping, and collapses the trailing run of "format the
+        report", "review the report" steps that mean nothing to a node whose
+        whole job is to write the answer once.
+        """
+        actions = [s for s in steps if s.intent is not StepIntent.SYNTHESIZE]
+        synthesis = [s for s in steps if s.intent is StepIntent.SYNTHESIZE]
+
+        # One document per request. A planner asked for a report with a
+        # provenance page reads that as two jobs and plans artifact.docx
+        # twice; each one is separately gated, so the approver is asked to
+        # sign off the same report a second time and a second near-identical
+        # file lands in the store. Other tools may legitimately repeat — the
+        # same calculation on different figures is normal — so only the ones
+        # that produce a file are collapsed.
+        seen_artifact: set[str] = set()
+        deduplicated: list[PlanStep] = []
+        for step in actions:
+            tool = step.tool or ""
+            if tool.startswith("artifact."):
+                if tool in seen_artifact:
+                    continue
+                seen_artifact.add(tool)
+            deduplicated.append(step)
+        actions = deduplicated
+        final = (
+            synthesis[-1]
+            if synthesis
+            else PlanStep(id="final", intent=StepIntent.SYNTHESIZE, description="Write the answer")
+        )
+        return [*actions, final]
 
     @staticmethod
     def _ensure_requested_artifact(

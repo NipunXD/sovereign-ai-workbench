@@ -145,3 +145,21 @@ class TestTruncatedJsonDebris:
 
     def test_ordinary_prose_is_untouched(self) -> None:
         assert _lines("The limit is 2 bar per minute.") == ["The limit is 2 bar per minute."]
+
+
+class TestNumberedReservedHeadings:
+    """A model writing a structured report numbers its sections.
+
+    So the clash with the builder's own provenance page arrives as "7.
+    Provenance", not "Provenance", and an exact match let it straight through
+    — a model-authored provenance section sitting directly above the real one,
+    which is the confusion the guard exists to prevent.
+    """
+
+    def test_a_numbered_reserved_heading_is_caught(self) -> None:
+        assert _safe_heading("7. Provenance") == "7. Provenance (as stated in the answer)"
+        assert _safe_heading("2) Sources") == "2) Sources (as stated in the answer)"
+
+    def test_an_ordinary_numbered_heading_is_untouched(self) -> None:
+        assert _safe_heading("3. Thickness Measurements") == "3. Thickness Measurements"
+        assert _safe_heading("1. Introduction") == "1. Introduction"

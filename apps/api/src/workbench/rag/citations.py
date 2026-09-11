@@ -27,19 +27,61 @@ from workbench.core.ir import BBox
 #   [[cite:a,b]]            several ids in one marker
 #   [[cite:a][cite:b]]      markers run together without separators
 #   [[cite:a]][[cite:b]]    adjacent markers
+#   (cite:a)                parenthesised
+#   [cite:a]                single brackets
+#
+# The bracket style is deliberately loose. A marker written `(cite:a)` used to
+# match nothing at all, which is worse than matching wrongly: an unrecognised
+# marker is not a marker, so it is never resolved *and* never reported as
+# unresolved. The chunk id stayed in the prose for the reader to see, the
+# grounding score came out as 0% on an answer that had cited every line, and
+# the failure looked like the model refusing to cite rather than the parser
+# refusing to read.
 #
 #: Matches one marker, capturing everything between the outer brackets.
-CITE_PATTERN = re.compile(r"\[\[\s*cite\s*:\s*(.+?)\s*\]\]", re.DOTALL)
+CITE_PATTERN = re.compile(
+    r"[\[\(]{1,2}\s*cite\s*:\s*(.+?)\s*[\]\)]{1,2}",
+    re.DOTALL | re.IGNORECASE,
+)
+
+#: A reference by the number shown in the source header — `[3]`, or `[[3]]`
+#: when the model doubles the brackets the way the id form does.
+#:
+#: This exists because the prompt carried two numbering schemes at once. Every
+#: source block is headed `[1] Title — page 4`, and the rules asked for
+#: `[[cite:the-id]]`. Shown a number and asked for a 26-character ULID, the
+#: model used the number — and a bare `[1]` matched nothing, so the answer came
+#: out full of references that resolved to nothing at all. That is the dangling
+#: reference this module exists to prevent, arrived at from the other side: not
+#: an invented id, but a real one the parser would not read.
+#:
+#: Citing by ordinal is also simply the more reliable ask. The list is right
+#: there in the prompt and the number is one character; the id has to be
+#: transcribed exactly.
+ORDINAL_PATTERN = re.compile(r"\[{1,2}\s*(\d{1,2})\s*\]{1,2}")
+
+#: Both forms, matched in one pass.
+#:
+#: One pass rather than two, because the output of the first is valid input to
+#: the second and means something different. Rewriting `[[cite:chk_b]]` to
+#: `[2]` and then running the ordinal pass re-read that `[2]` as "the second
+#: source" — a correctly cited claim silently repointed at a document it never
+#: came from, which is the one error this module must never make.
+MARKER_PATTERN = re.compile(
+    r"[\[\(]{1,2}\s*cite\s*:\s*(?P<ids>.+?)\s*[\]\)]{1,2}"
+    r"|\[{1,2}\s*(?P<ordinal>\d{1,2})\s*\]{1,2}",
+    re.DOTALL | re.IGNORECASE,
+)
 
 #: Splits a marker body into ids, tolerating the run-together form.
-_ID_SPLIT = re.compile(r"[,;\s]+|\]\s*\[\s*cite\s*:\s*", re.IGNORECASE)
+_ID_SPLIT = re.compile(r"[,;\s]+|[\]\)]\s*[\[\(]\s*cite\s*:\s*", re.IGNORECASE)
 
 
 def _marker_ids(body: str) -> list[str]:
     """Extract every chunk id from one marker body, in order."""
     ids = []
     for token in _ID_SPLIT.split(body):
-        token = token.strip().strip("[]")
+        token = token.strip().strip("[]()")
         if token.lower().startswith("cite:"):
             token = token[5:].strip()
         if token:
@@ -156,20 +198,38 @@ def resolve_markers(text: str, evidence: list[EvidenceItem]) -> ResolvedAnswer:
     citations: list[Citation] = []
     unresolved: list[str] = []
 
+    def number_for(item: EvidenceItem) -> int:
+        """The reference number this source carries in the finished answer."""
+        key = item.chunk_id
+        if key not in assigned:
+            assigned[key] = len(assigned) + 1
+            citations.append(item.to_citation(assigned[key]))
+        return assigned[key]
+
     def replace(match: re.Match[str]) -> str:
+        ordinal = match.group("ordinal")
+        if ordinal is not None:
+            # A reference by the number shown in the source header.
+            position = int(ordinal)
+            if not 1 <= position <= len(evidence):
+                # The model referred to a source it was never shown. Same
+                # treatment as an invented id: removed and reported, because a
+                # reference to nothing is worse than no reference.
+                unresolved.append(match.group(0))
+                return ""
+            return f"[{number_for(evidence[position - 1])}]"
+
         numbers: list[int] = []
-        for chunk_id in _marker_ids(match.group(1)):
+        for chunk_id in _marker_ids(match.group("ids")):
             item = by_id.get(chunk_id.casefold())
             if item is None:
                 unresolved.append(chunk_id)
                 continue
-            if chunk_id not in assigned:
-                assigned[chunk_id] = len(assigned) + 1
-                citations.append(item.to_citation(assigned[chunk_id]))
-            numbers.append(assigned[chunk_id])
+            numbers.append(number_for(item))
         return "".join(f"[{n}]" for n in numbers)
 
-    resolved = CITE_PATTERN.sub(replace, text)
+    resolved = MARKER_PATTERN.sub(replace, text)
+
     # Removing a marker can leave " ." or a double space behind.
     resolved = re.sub(r"\s+([.,;:!?])", r"\1", resolved)
     resolved = re.sub(r"[ \t]{2,}", " ", resolved).strip()
