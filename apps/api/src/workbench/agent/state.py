@@ -173,6 +173,8 @@ class AgentState(TypedDict, total=False):
     conversation_id: str
     principal: Principal
     user_input: str
+    #: Prior turns of the conversation, oldest first, for follow-ups.
+    history: list[dict[str, str]]
     attachments: list[dict[str, Any]]
 
     plan: Plan

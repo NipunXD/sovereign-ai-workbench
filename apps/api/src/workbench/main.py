@@ -352,6 +352,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         audit,
         auth,
         chat,
+        conversations,
         documents,
         health,
         search,
@@ -364,6 +365,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(search.router, prefix="/api/v1")
     app.include_router(audit.router, prefix="/api/v1")
     app.include_router(approvals.router, prefix="/api/v1")
+    app.include_router(conversations.router, prefix="/api/v1")
 
     return app
 

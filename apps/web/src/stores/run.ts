@@ -47,6 +47,9 @@ export interface ChatMessage {
 
 interface RunState {
   messages: ChatMessage[];
+  /** The saved conversation these messages belong to. Null until the first
+   *  run of a new chat reports the id it was given. */
+  conversationId: string | null;
   running: boolean;
   /** Whether the model is still in its thinking phase — before the first
    *  answer token. On a local model that gap is several seconds, and without
@@ -64,7 +67,27 @@ interface RunState {
   setApproval: (approval: ApprovalState) => void;
   setRunning: (running: boolean) => void;
   setThinking: (thinking: boolean) => void;
+  setConversationId: (id: string | null) => void;
   reset: () => void;
+}
+
+export function emptyAssistant(id: string, startedAt: number): ChatMessage {
+  return {
+    id,
+    role: "assistant",
+    text: "",
+    citations: [],
+    trace: [],
+    reasoning: "",
+    validation: null,
+    summary: null,
+    status: "streaming",
+    limitations: [],
+    steps: [],
+    artifacts: [],
+    approval: null,
+    startedAt,
+  };
 }
 
 /** Apply a change to the most recent message, which is the one being streamed. */
@@ -80,6 +103,7 @@ function patchLastMessage(
 
 export const useRun = create<RunState>((set) => ({
   messages: [],
+  conversationId: null,
   running: false,
   thinking: false,
 
@@ -170,5 +194,7 @@ export const useRun = create<RunState>((set) => ({
 
   setRunning: (running) => set({ running }),
   setThinking: (thinking) => set({ thinking }),
-  reset: () => set({ messages: [], running: false, thinking: false }),
+  setConversationId: (conversationId) => set({ conversationId }),
+
+  reset: () => set({ messages: [], conversationId: null, running: false, thinking: false }),
 }));

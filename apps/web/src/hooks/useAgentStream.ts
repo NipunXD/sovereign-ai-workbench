@@ -1,19 +1,12 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef } from "react";
 
 import { getAccessToken } from "@/lib/api";
+import { applyEvent } from "@/lib/replay";
 import { streamRequest } from "@/lib/sse";
-import type {
-  ApprovalState,
-  Citation,
-  GeneratedArtifact,
-  PlanStep,
-  RouteDecision,
-  RunSummary,
-  ValidationReport,
-} from "@/lib/types";
-import { useRun } from "@/stores/run";
+import { emptyAssistant, useRun } from "@/stores/run";
 
 /** How long silence has to last before the stream is treated as dead.
  *
@@ -32,33 +25,37 @@ const STALL_CHECK_MS = 5_000;
  * emits hundreds of fragments, and re-rendering the markdown on every one of
  * them makes the whole page stutter — batching to the frame rate makes it
  * smooth without any visible delay.
+ *
+ * The events themselves are reduced by `applyEvent`, shared with the code that
+ * replays a saved conversation, so live and reopened runs are built the same
+ * way.
  */
 export function useAgentStream() {
+  const queryClient = useQueryClient();
   const controller = useRef<AbortController | null>(null);
   const buffer = useRef("");
   const reasoningBuffer = useRef("");
   const frame = useRef<number | null>(null);
 
   const flush = useCallback(() => {
-    frame.current = null;
-    const store = useRun.getState();
     if (buffer.current) {
-      store.appendToken(buffer.current);
+      useRun.getState().appendToken(buffer.current);
       buffer.current = "";
     }
     if (reasoningBuffer.current) {
-      store.appendReasoning(reasoningBuffer.current);
+      useRun.getState().appendReasoning(reasoningBuffer.current);
       reasoningBuffer.current = "";
     }
+    frame.current = null;
   }, []);
 
   const schedule = useCallback(() => {
-    if (frame.current === null) frame.current = requestAnimationFrame(flush);
+    if (frame.current !== null) return;
+    frame.current = requestAnimationFrame(flush);
   }, [flush]);
 
   const cancel = useCallback(() => {
     controller.current?.abort();
-    controller.current = null;
     const store = useRun.getState();
     store.setRunning(false);
     store.setThinking(false);
@@ -71,37 +68,12 @@ export function useAgentStream() {
       if (store.running) return;
 
       store.append({
-        id: `u-${Date.now()}`,
+        ...emptyAssistant(`u-${Date.now()}`, Date.now()),
         role: "user",
         text: message,
-        citations: [],
-        trace: [],
-        reasoning: "",
-        validation: null,
-        summary: null,
         status: "done",
-        limitations: [],
-        steps: [],
-        artifacts: [],
-        approval: null,
-        startedAt: Date.now(),
       });
-      store.append({
-        id: `a-${Date.now()}`,
-        role: "assistant",
-        text: "",
-        citations: [],
-        trace: [],
-        reasoning: "",
-        validation: null,
-        summary: null,
-        status: "streaming",
-        limitations: [],
-        steps: [],
-        artifacts: [],
-        approval: null,
-        startedAt: Date.now(),
-      });
+      store.append(emptyAssistant(`a-${Date.now()}`, Date.now()));
       store.setRunning(true);
       store.setThinking(true);
 
@@ -122,9 +94,21 @@ export function useAgentStream() {
         controller.current?.abort();
       }, STALL_CHECK_MS);
 
+      const io = {
+        token: (text: string) => {
+          buffer.current += text;
+          schedule();
+        },
+        reasoning: (text: string) => {
+          reasoningBuffer.current += text;
+          schedule();
+        },
+      };
+
       try {
         for await (const event of streamRequest("/api/v1/chat/stream", {
-          body: { message },
+          // Continuing a saved conversation, or starting one the server names.
+          body: { message, conversation_id: store.conversationId },
           token: getAccessToken(),
           signal: controller.current.signal,
           // Heartbeats count. The run is legitimately silent for minutes
@@ -142,155 +126,11 @@ export function useAgentStream() {
           } catch {
             continue;
           }
-          const run = useRun.getState();
-
-          switch (event.event) {
-            case "token":
-              buffer.current += String(payload.text ?? "");
-              schedule();
-              break;
-
-            case "reasoning":
-              reasoningBuffer.current += String(payload.text ?? "");
-              schedule();
-              break;
-
-            case "route_decision":
-              run.addTrace({ kind: "route", at, data: payload as unknown as RouteDecision });
-              break;
-
-            case "plan_created": {
-              const steps = (payload.steps ?? []) as PlanStep[];
-              run.setPlan(steps);
-              run.addTrace({ kind: "plan", at, steps, rationale: String(payload.rationale ?? "") });
-              break;
-            }
-
-            case "step_started":
-              run.markStep(String(payload.step_id ?? ""), "active", at);
-              run.addTrace({
-                kind: "step",
-                at,
-                stepId: String(payload.step_id ?? ""),
-                intent: String(payload.intent ?? ""),
-                description: String(payload.description ?? ""),
-              });
-              break;
-
-            case "step_finished":
-              run.markStep(String(payload.step_id ?? ""), "done", at);
-              break;
-
-            case "artifact_created": {
-              // A produced document is a first-class result, not a line in
-              // the trace. It goes on the message as a card.
-              const artifact = payload as unknown as GeneratedArtifact;
-              run.addArtifact(artifact);
-              run.addTrace({ kind: "artifact", at, artifact });
-              break;
-            }
-
-            case "approval_required": {
-              // Two events share this name: the request, and the decision.
-              // Both update one state so the banner moves from "waiting"
-              // to "approved by …" in place rather than stacking.
-              const previous = run.messages.at(-1)?.approval;
-              const status = String(payload.status ?? "pending") as ApprovalState["status"];
-              const approval: ApprovalState = {
-                approval_id: String(payload.approval_id ?? previous?.approval_id ?? ""),
-                tool: String(payload.tool ?? previous?.tool ?? ""),
-                status,
-                requested_at: previous?.requested_at ?? at,
-                expires_at: (payload.expires_at as string | null) ?? previous?.expires_at ?? null,
-                waiting_s: Number(payload.waiting_s ?? previous?.waiting_s ?? 240),
-                decided_by: (payload.decided_by as string | null) ?? null,
-                decided_at: (payload.decided_at as string | null) ?? null,
-                comment: (payload.comment as string | null) ?? null,
-              };
-              run.setApproval(approval);
-              run.addTrace({ kind: "approval", at, approval });
-              break;
-            }
-
-            case "retrieval_result":
-              run.addTrace({
-                kind: "retrieval",
-                at,
-                query: String(payload.query ?? ""),
-                hits: (payload.hits ?? []) as never[],
-                total: Number(payload.total_evidence ?? 0),
-              });
-              break;
-
-            case "tool_call":
-              run.addTrace({
-                kind: "tool",
-                at,
-                tool: String(payload.tool ?? ""),
-                args: payload.args as Record<string, unknown> | undefined,
-              });
-              break;
-
-            case "tool_result":
-              run.addTrace({
-                kind: "tool",
-                at,
-                tool: String(payload.tool ?? ""),
-                ok: Boolean(payload.ok),
-                error: payload.error ? String(payload.error) : undefined,
-                metrics: payload.metrics as Record<string, unknown> | undefined,
-              });
-              break;
-
-            case "citation":
-              run.addCitation(payload as unknown as Citation);
-              break;
-
-            case "answer": {
-              // Tokens streamed live still carry raw [[cite:...]] markers,
-              // because a marker cannot be renumbered until the surrounding
-              // text exists. This is the resolved version.
-              flush();
-              run.patchLast({
-                text: String(payload.text ?? ""),
-                citations: (payload.citations ?? []) as Citation[],
-              });
-              break;
-            }
-
-            case "validation":
-              run.patchLast({ validation: payload as unknown as ValidationReport });
-              run.addTrace({ kind: "validation", at, data: payload as unknown as ValidationReport });
-              break;
-
-            case "error":
-              run.addTrace({
-                kind: "error",
-                at,
-                code: String(payload.code ?? "error"),
-                message: String(payload.message ?? ""),
-                recoverable: Boolean(payload.recoverable),
-              });
-              break;
-
-            case "limitation": {
-              const message = String(payload.message ?? "");
-              const existing = run.messages.at(-1)?.limitations ?? [];
-              if (message && !existing.includes(message)) {
-                run.patchLast({ limitations: [...existing, message] });
-              }
-              break;
-            }
-
-            case "run_finished":
-              finished = true;
-              flush();
-              run.patchLast({
-                summary: payload as unknown as RunSummary,
-                status: payload.status === "failed" ? "error" : "done",
-              });
-              break;
-          }
+          // The resolved answer replaces the token stream; flush first so a
+          // late fragment cannot land on top of the final text.
+          if (event.event === "answer" || event.event === "run_finished") flush();
+          const result = applyEvent(event.event, payload, at, io);
+          if (result.finished) finished = true;
         }
       } catch (error) {
         if ((error as Error).name !== "AbortError") {
@@ -319,9 +159,11 @@ export function useAgentStream() {
           );
         }
         controller.current = null;
+        // The sidebar's list: a new conversation appears, an old one moves up.
+        void queryClient.invalidateQueries({ queryKey: ["conversations"] });
       }
     },
-    [flush, schedule],
+    [flush, schedule, queryClient],
   );
 
   return { send, cancel };

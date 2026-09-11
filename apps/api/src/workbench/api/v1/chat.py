@@ -14,22 +14,26 @@ responsiveness and swaps in the resolved version at the end.
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import AsyncIterator
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlmodel import col
 
 from workbench.agent.runner import AgentRunner
 from workbench.agent.state import Budget
 from workbench.api.deps import CurrentPrincipal, DbSession, require_permission
 from workbench.api.sse import SSE_HEADERS, EventName, format_sse, with_heartbeat
-from workbench.api.v1.runs import close_run, open_run
+from workbench.api.v1.runs import close_run, open_run, persist_message, recent_history
 from workbench.artifacts.records import persist_artifact
+from workbench.core.errors import NotFoundError
 from workbench.core.ids import prefixed_id
 from workbench.core.logging import get_logger
-from workbench.db.models import AuditAction, RunStatus
+from workbench.db.models import AuditAction, Conversation, RunStatus
 from workbench.db.session import session_scope
 from workbench.security.audit import AuditLogger
 from workbench.security.rbac import Principal
@@ -81,6 +85,11 @@ def _finalise_in_background(
     failure: dict[str, Any] | None,
     citations: int,
     principal: Principal,
+    trace: list[dict[str, Any]] | None = None,
+    answer: str = "",
+    answer_citations: list[dict[str, Any]] | None = None,
+    model_used: str | None = None,
+    latency_ms: int | None = None,
 ) -> None:
     """Close out a run on a task of its own.
 
@@ -98,7 +107,22 @@ def _finalise_in_background(
             budget=budget,
             validation=validation,
             error=failure,
+            trace=trace,
         )
+        # The assistant's turn, with its citations, so the conversation can be
+        # reopened. Written even for a cancelled or failed run: whatever
+        # arrived before the cut is what the person saw, and a saved chat that
+        # silently drops a turn misrepresents what happened.
+        if answer or failure:
+            await persist_message(
+                conversation_id=conversation_id,
+                role="assistant",
+                content=answer,
+                run_id=run_id,
+                model_used=model_used,
+                latency_ms=latency_ms,
+                citations=answer_citations or [],
+            )
         try:
             async with session_scope() as session:
                 await AuditLogger(session).log(
@@ -132,8 +156,30 @@ async def chat_stream(
     """Run one request and stream its trace."""
     runner = build_runner(request)
     run_id = prefixed_id("run")
-    conversation_id = payload.conversation_id or prefixed_id("conversation")
     audit = AuditLogger(session)
+
+    # Continuing a conversation means it must be *this person's*. Without the
+    # check, a run could be attached to anybody's conversation by id, and its
+    # answer would then appear in their saved history.
+    if payload.conversation_id:
+        owned = (
+            await session.execute(
+                select(Conversation).where(
+                    col(Conversation.id) == payload.conversation_id,
+                    col(Conversation.user_id) == principal.user_id,
+                    col(Conversation.archived_at).is_(None),
+                )
+            )
+        ).scalar_one_or_none()
+        if owned is None:
+            raise NotFoundError("No such conversation.")
+        conversation_id = owned.id
+    else:
+        conversation_id = prefixed_id("conversation")
+
+    # What was said before, so a follow-up ("and for CML-06?") has something
+    # to follow. Read before this turn is written.
+    history = await recent_history(session, conversation_id) if payload.conversation_id else []
 
     await audit.log(
         AuditAction.RUN_START,
@@ -154,6 +200,9 @@ async def chat_stream(
         principal=principal,
         message=payload.message,
     )
+    await persist_message(
+        conversation_id=conversation_id, role="user", content=payload.message, run_id=run_id
+    )
 
     async def stream() -> AsyncIterator[str]:
         seq = 0
@@ -163,6 +212,15 @@ async def chat_stream(
         budget_used: dict[str, Any] = {}
         validation: dict[str, Any] = {}
         failure: dict[str, Any] | None = None
+        # The replayable record. Tokens are folded into the final answer and
+        # reasoning into one event at the end, so what is stored is what the
+        # browser needs to rebuild the view, not the firehose that built it.
+        stored: list[dict[str, Any]] = []
+        reasoning_parts: list[str] = []
+        answer_text = ""
+        answer_citations: list[dict[str, Any]] = []
+        model_used: str | None = None
+        started = time.monotonic()
         # The gate decides before the tool runs, so an artifact produced after
         # an approval in this run is already approved — it should not sit in
         # the queue a second time asking about the same decision.
@@ -174,12 +232,35 @@ async def chat_stream(
                 principal=principal,
                 run_id=run_id,
                 conversation_id=conversation_id,
+                history=history,
                 budget=Budget(
                     max_tool_calls=payload.options.max_tool_calls,
                     max_wall_s=payload.options.max_wall_s,
                 ),
             ):
                 seq += 1
+                if event.name == EventName.TOKEN:
+                    pass
+                elif event.name == EventName.REASONING:
+                    reasoning_parts.append(str(event.data.get("text", "")))
+                else:
+                    data = dict(event.data)
+                    if event.name == EventName.RUN_STARTED:
+                        data["conversation_id"] = conversation_id
+                    stored.append(
+                        {
+                            "name": event.name,
+                            "data": data,
+                            "at_ms": int((time.monotonic() - started) * 1000),
+                        }
+                    )
+                if event.name == EventName.ROUTE_DECISION and model_used is None:
+                    model_used = str(
+                        event.data.get("physical_model") or event.data.get("model") or ""
+                    )
+                if event.name == EventName.ANSWER:
+                    answer_text = str(event.data.get("text", ""))
+                    answer_citations = list(event.data.get("citations") or [])
                 if event.name == EventName.CITATION:
                     citations.append(event.data)
                 elif event.name == EventName.APPROVAL_REQUIRED:
@@ -200,7 +281,12 @@ async def chat_stream(
                 elif event.name == EventName.RUN_FINISHED:
                     status = event.data.get("status", RunStatus.SUCCEEDED)
                     budget_used = event.data.get("budget") or {}
-                yield format_sse(event.name, event.data, seq=seq)
+                if event.name == EventName.RUN_STARTED:
+                    yield format_sse(
+                        event.name, {**event.data, "conversation_id": conversation_id}, seq=seq
+                    )
+                else:
+                    yield format_sse(event.name, event.data, seq=seq)
         except asyncio.CancelledError:
             # The client went away — a closed tab, a navigation, a reload. This
             # is not caught by `except Exception`: CancelledError is a
@@ -235,6 +321,15 @@ async def chat_stream(
             # one's cancellation. The reference is held until it finishes
             # because the loop only keeps weak references to tasks, and a
             # garbage-collected cleanup task is the same bug with extra steps.
+            reasoning = "".join(reasoning_parts)
+            if reasoning:
+                stored.append(
+                    {
+                        "name": EventName.REASONING,
+                        "data": {"text": reasoning[:20000]},
+                        "at_ms": int((time.monotonic() - started) * 1000),
+                    }
+                )
             _finalise_in_background(
                 run_id=run_id,
                 conversation_id=conversation_id,
@@ -245,6 +340,11 @@ async def chat_stream(
                 failure=failure,
                 citations=len(citations),
                 principal=principal,
+                trace=stored,
+                answer=answer_text,
+                answer_citations=answer_citations,
+                model_used=model_used,
+                latency_ms=int((time.monotonic() - started) * 1000),
             )
 
     # Wrapped so the connection carries traffic during the run's silences. The

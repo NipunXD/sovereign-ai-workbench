@@ -119,6 +119,15 @@ class AgentRun(SQLModel, table=True):
         default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
     )
     error: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
+    #: The run's trace events, minus the token stream, in order. Stored so a
+    #: reopened conversation shows exactly what the live one did — the plan,
+    #: every retrieval, the evidence map, the tool calls, the approval — by
+    #: replaying them through the same reducer the browser used the first
+    #: time. A saved chat that keeps the answer and loses its evidence is a
+    #: transcript, not a record.
+    trace: list[dict[str, Any]] = Field(
+        default_factory=list, sa_column=Column(JSONB, nullable=False, server_default="[]")
+    )
     started_at: datetime = Field(default_factory=now, sa_type=UTCDateTime)
     finished_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
     wall_ms: int | None = None

@@ -28,6 +28,17 @@ from workbench.settings import get_settings
 
 pytestmark = pytest.mark.integration
 
+#: Conversation ids the tests below create, removed in the fixture teardown.
+#: They ran against the shared dev database and every one left behind is a
+#: row in a real person's saved-sessions list.
+CREATED: list[str] = []
+
+
+def _conversation_id() -> str:
+    conversation_id = prefixed_id("conversation")
+    CREATED.append(conversation_id)
+    return conversation_id
+
 
 @pytest.fixture
 async def db_user():
@@ -52,6 +63,32 @@ async def db_user():
 
     yield principal
 
+    if CREATED:
+        from sqlalchemy import delete
+        from sqlmodel import col
+
+        from workbench.db.models import AgentRun, Conversation, Message, MessageCitation
+
+        async with session_scope() as session:
+            message_ids = [
+                m.id
+                for m in (
+                    await session.execute(
+                        select(Message).where(col(Message.conversation_id).in_(CREATED))
+                    )
+                ).scalars()
+            ]
+            if message_ids:
+                await session.execute(
+                    delete(MessageCitation).where(col(MessageCitation.message_id).in_(message_ids))
+                )
+            await session.execute(delete(Message).where(col(Message.conversation_id).in_(CREATED)))
+            await session.execute(
+                delete(AgentRun).where(col(AgentRun.conversation_id).in_(CREATED))
+            )
+            await session.execute(delete(Conversation).where(col(Conversation.id).in_(CREATED)))
+        CREATED.clear()
+
     # Disposed between tests, as the other integration suites do. An engine
     # left open leaks connections that surface as unraisable exceptions from
     # the garbage collector rather than as a clear failure.
@@ -68,7 +105,7 @@ async def test_a_run_is_recorded_when_it_starts(db_user) -> None:
     run_id = prefixed_id("run")
     await open_run(
         run_id=run_id,
-        conversation_id=prefixed_id("conversation"),
+        conversation_id=_conversation_id(),
         principal=db_user,
         message="What is the depressurisation rate limit for V-1201?",
     )
@@ -83,7 +120,7 @@ async def test_a_completed_run_is_closed_with_its_plan(db_user) -> None:
     run_id = prefixed_id("run")
     await open_run(
         run_id=run_id,
-        conversation_id=prefixed_id("conversation"),
+        conversation_id=_conversation_id(),
         principal=db_user,
         message="anything",
     )
@@ -112,7 +149,7 @@ async def test_a_cancelled_run_is_recorded_as_cancelled(db_user) -> None:
     run_id = prefixed_id("run")
     await open_run(
         run_id=run_id,
-        conversation_id=prefixed_id("conversation"),
+        conversation_id=_conversation_id(),
         principal=db_user,
         message="Produce a Word report.",
     )
@@ -135,7 +172,7 @@ async def test_closing_an_unknown_run_is_not_an_error(db_user) -> None:
 
 
 async def test_a_second_run_reuses_its_conversation(db_user) -> None:
-    conversation_id = prefixed_id("conversation")
+    conversation_id = _conversation_id()
     first, second = prefixed_id("run"), prefixed_id("run")
     await open_run(run_id=first, conversation_id=conversation_id, principal=db_user, message="one")
     await open_run(run_id=second, conversation_id=conversation_id, principal=db_user, message="two")
@@ -153,7 +190,7 @@ async def test_startup_reaps_runs_a_dead_process_left_behind(db_user) -> None:
     run_id = prefixed_id("run")
     await open_run(
         run_id=run_id,
-        conversation_id=prefixed_id("conversation"),
+        conversation_id=_conversation_id(),
         principal=db_user,
         message="orphan",
     )
@@ -176,7 +213,7 @@ async def test_a_recent_run_is_not_reaped(db_user) -> None:
     run_id = prefixed_id("run")
     await open_run(
         run_id=run_id,
-        conversation_id=prefixed_id("conversation"),
+        conversation_id=_conversation_id(),
         principal=db_user,
         message="still going",
     )
@@ -209,7 +246,7 @@ async def test_finalisation_survives_the_cancellation_that_triggered_it(db_user)
 
     async def run_once(*, detached: bool) -> str:
         run_id = prefixed_id("run")
-        conversation_id = prefixed_id("conversation")
+        conversation_id = _conversation_id()
         await open_run(
             run_id=run_id,
             conversation_id=conversation_id,

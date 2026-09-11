@@ -411,3 +411,55 @@ export interface Artifact {
   created_at: string;
   provenance: ArtifactProvenance;
 }
+
+
+// --- saved conversations ----------------------------------------------------
+
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+  artifact_count: number;
+  preview: string;
+}
+
+export interface StoredMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  run_id: string | null;
+  model_used: string | null;
+  latency_ms: number | null;
+  created_at: string;
+  citations: Citation[];
+}
+
+/** One trace event as stored: the same shape the live stream carries. */
+export interface StoredEvent {
+  name: TraceEventName | "limitation";
+  data: Record<string, unknown>;
+  at_ms: number;
+}
+
+export interface StoredRun {
+  id: string;
+  status: string;
+  started_at: string;
+  finished_at: string | null;
+  wall_ms: number | null;
+  plan: Record<string, unknown>;
+  validation: Record<string, unknown>;
+  trace: StoredEvent[];
+}
+
+export interface ConversationDetail {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  messages: StoredMessage[];
+  runs: StoredRun[];
+  artifacts: Array<GeneratedArtifact & { run_id: string | null; status: string }>;
+}

@@ -93,6 +93,7 @@ async def close_run(
     budget: dict[str, Any] | None = None,
     validation: dict[str, Any] | None = None,
     error: dict[str, Any] | None = None,
+    trace: list[dict[str, Any]] | None = None,
 ) -> None:
     """Finalise a run on a connection of its own.
 
@@ -119,6 +120,8 @@ async def close_run(
                 run.validation = validation
             if error is not None:
                 run.error = error
+            if trace is not None:
+                run.trace = trace
     except Exception as exc:
         log.error("run_close_failed", run_id=run_id, status=status, error=str(exc))
 
@@ -168,3 +171,88 @@ async def reap_orphans(older_than_s: float = 900.0) -> int:
     except Exception as exc:
         log.error("run_reap_failed", error=str(exc))
         return 0
+
+
+async def persist_message(
+    *,
+    conversation_id: str,
+    role: str,
+    content: str,
+    run_id: str | None = None,
+    model_used: str | None = None,
+    latency_ms: int | None = None,
+    citations: list[dict[str, Any]] | None = None,
+) -> None:
+    """Write one turn of a conversation, with its resolved citations.
+
+    Best-effort, on its own session, for the same reasons as :func:`close_run`
+    — the assistant's turn is written from a finaliser that may be running
+    inside a cancelled request.
+    """
+    from workbench.db.models import Message, MessageCitation
+
+    try:
+        async with session_scope() as session:
+            message = Message(
+                conversation_id=conversation_id,
+                role=role,
+                content=content,
+                run_id=run_id,
+                model_used=model_used,
+                latency_ms=latency_ms,
+            )
+            session.add(message)
+            await session.flush()
+            for c in citations or []:
+                session.add(
+                    MessageCitation(
+                        message_id=message.id,
+                        n=int(c.get("n", 0)),
+                        chunk_id=str(c.get("chunk_id", "")),
+                        doc_id=str(c.get("doc_id", "")),
+                        doc_title=str(c.get("doc_title", "")),
+                        page_no=int(c.get("page_no", 1)),
+                        bbox=dict(c.get("bbox") or {}),
+                        snippet=str(c.get("snippet", "")),
+                        section_path=list(c.get("section_path") or []),
+                        score=float(c.get("score", 0.0)),
+                        retrieval_method=str(c.get("retrieval_method", "hybrid")),
+                        confidence=float(c.get("confidence", 1.0)),
+                    )
+                )
+            conversation = await session.get(Conversation, conversation_id)
+            if conversation is not None:
+                conversation.updated_at = now()
+    except Exception as exc:
+        log.error(
+            "message_persist_failed", conversation_id=conversation_id, role=role, error=str(exc)
+        )
+
+
+#: How much of a conversation a follow-up sees. Six turns, each cut short:
+#: enough for "and the 2023 figure?" to mean something, small enough that the
+#: evidence — the thing that should dominate the prompt — still does.
+HISTORY_TURNS = 6
+HISTORY_CHARS = 600
+
+
+async def recent_history(session: Any, conversation_id: str) -> list[dict[str, str]]:
+    """The last few turns, oldest first, for the model's context."""
+    from sqlalchemy import select
+
+    from workbench.db.models import Message
+
+    rows = list(
+        (
+            await session.execute(
+                select(Message)
+                .where(col(Message.conversation_id) == conversation_id)
+                .order_by(col(Message.created_at).desc())
+                .limit(HISTORY_TURNS)
+            )
+        ).scalars()
+    )
+    rows.reverse()
+    return [
+        {"role": m.role, "content": (m.content or "")[:HISTORY_CHARS]} for m in rows if m.content
+    ]

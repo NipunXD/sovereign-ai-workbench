@@ -9,6 +9,8 @@
 
 import type {
   Approval,
+  ConversationDetail,
+  ConversationSummary,
   Artifact,
   AuditPage,
   AuditSummary,
@@ -230,6 +232,24 @@ export const api = {
     request<Artifact[]>(`/artifacts${status ? `?status=${status}` : ""}`),
 
   artifactDownloadUrl: (sha256: string) => `${BASE}/artifacts/${sha256}/download`,
+
+  // --- conversations --------------------------------------------------------
+
+  conversations: (search = "") =>
+    request<ConversationSummary[]>(
+      `/conversations${search ? `?search=${encodeURIComponent(search)}` : ""}`,
+    ),
+
+  conversation: (id: string) => request<ConversationDetail>(`/conversations/${id}`),
+
+  renameConversation: (id: string, title: string) =>
+    request<ConversationSummary>(`/conversations/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ title }),
+    }),
+
+  archiveConversation: (id: string) =>
+    request<void>(`/conversations/${id}`, { method: "DELETE" }),
 
   // --- system ---------------------------------------------------------------
 

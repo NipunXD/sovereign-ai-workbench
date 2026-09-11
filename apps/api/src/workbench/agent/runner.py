@@ -150,6 +150,25 @@ class Retriever:
         raise NotImplementedError
 
 
+def _with_history(state: AgentState) -> str:
+    """The request, preceded by what was said before it in this conversation.
+
+    A follow-up like "and for CML-06?" is meaningless on its own. The prior
+    turns are labelled as history rather than merged into the question, so
+    the model knows which part is being asked now — and the evidence rules
+    still apply to the answer, not to anything the earlier turns claimed.
+    """
+    history = state.get("history") or []
+    if not history:
+        return f"Question: {state['user_input']}"
+    lines = [f"- {turn['role']}: {turn['content']}" for turn in history]
+    return (
+        "Conversation so far (for context only; do not cite it as a source):\n"
+        + "\n".join(lines)
+        + f"\n\nQuestion: {state['user_input']}"
+    )
+
+
 class AgentRunner:
     """Executes one request and streams its trace."""
 
@@ -192,11 +211,13 @@ class AgentRunner:
         conversation_id: str = "",
         attachments: list[dict[str, Any]] | None = None,
         budget: Budget | None = None,
+        history: list[dict[str, str]] | None = None,
     ) -> AsyncIterator[TraceEvent]:
         """Execute the loop, yielding trace events as they happen."""
         state: AgentState = {
             "run_id": run_id or prefixed_id("run"),
             "conversation_id": conversation_id,
+            "history": list(history or []),
             "principal": principal,
             "user_input": user_input,
             "attachments": attachments or [],
@@ -277,7 +298,7 @@ class AgentRunner:
             decision.model.logical_name,
             [
                 ChatMessage(role="system", content=f"{PLANNER_PROMPT}\n\nTools:\n{catalogue_text}"),
-                ChatMessage(role="user", content=state["user_input"]),
+                ChatMessage(role="user", content=_with_history(state)),
             ],
             json_schema=_PLAN_SCHEMA,
             state=state,
@@ -1084,7 +1105,7 @@ class AgentRunner:
         yield TraceEvent(EventName.VALIDATION, report.as_dict())
 
     def _synthesis_input(self, state: AgentState, evidence: list[EvidenceItem]) -> str:
-        parts = [f"Question: {state['user_input']}", "", build_evidence_prompt(evidence)]
+        parts = [_with_history(state), "", build_evidence_prompt(evidence)]
         if state["scratchpad"]:
             parts += ["", "Tool results:", json.dumps(state["scratchpad"], indent=2)[:4000]]
         if state["budget"].exhausted:
