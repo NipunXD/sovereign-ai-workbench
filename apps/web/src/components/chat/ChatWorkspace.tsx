@@ -1,10 +1,11 @@
 "use client";
 
-import { ArrowUp, Sparkles, Square } from "lucide-react";
+import { ArrowUp, Square } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { Answer, CitationList } from "@/components/chat/Answer";
+import { Welcome } from "@/components/chat/Welcome";
 import { ApprovalBanner } from "@/components/chat/ApprovalBanner";
 import { ArtifactCard } from "@/components/chat/ArtifactCard";
 import { Inspector } from "@/components/chat/Inspector";
@@ -16,32 +17,10 @@ import { useAgentStream } from "@/hooks/useAgentStream";
 import { cn, formatDuration } from "@/lib/utils";
 import { useInspector } from "@/stores/inspector";
 import { useRun, type ChatMessage } from "@/stores/run";
-import { useSession } from "@/stores/session";
-
-/** Questions that exercise the parts of the system worth showing. */
-const SUGGESTIONS: Array<{ q: string; why: string }> = [
-  {
-    q: "What is the depressurisation rate limit for V-1201, and what hold time does the SOP require?",
-    why: "grounded lookup",
-  },
-  {
-    q: "Using the 2023 and 2029 CML-04 readings for V-1201, compute the corrosion rate and remaining life against the 8.0 mm minimum.",
-    why: "unit-checked calculation",
-  },
-  {
-    q: "Produce a Word report of the V-1201 thickness survey with every reading in a table.",
-    why: "document, gated by a second person",
-  },
-  {
-    q: "What was the purge duration used during the 2019 turnaround?",
-    why: "deliberately unanswerable",
-  },
-];
 
 export function ChatWorkspace() {
   const { messages, running, thinking, conversationId } = useRun();
   const { send, cancel } = useAgentStream();
-  const { principal } = useSession();
   const setTab = useInspector((s) => s.setTab);
   const router = useRouter();
   const pathname = usePathname();
@@ -95,9 +74,7 @@ export function ChatWorkspace() {
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto max-w-3xl px-5 py-6">
             {!messages.length ? (
-              <EmptyConversation
-                username={principal?.username ?? ""}
-                clearance={principal?.clearance ?? ""}
+              <Welcome
                 onPick={(q) => {
                   setInput(q);
                   textareaRef.current?.focus();
@@ -248,50 +225,6 @@ function AssistantTurn({
       {message.status !== "streaming" ? <CitationList citations={message.citations} /> : null}
 
       {message.summary ? <RunFooter summary={message.summary} validation={message.validation} /> : null}
-    </div>
-  );
-}
-
-function EmptyConversation({
-  username,
-  clearance,
-  onPick,
-}: {
-  username: string;
-  clearance: string;
-  onPick: (q: string) => void;
-}) {
-  return (
-    <div className="animate-fade-in-up mt-10">
-      <div className="mb-1.5 flex items-center gap-2">
-        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/15 text-accent">
-          <Sparkles size={14} />
-        </span>
-        <h2 className="text-base font-semibold tracking-tight">Ask the plant&apos;s documents</h2>
-      </div>
-      <p className="mb-6 max-w-xl text-sm leading-relaxed text-fg-muted">
-        Answers come with a map of what was read and a citation on every claim you can open to
-        the exact passage. When the corpus does not cover something, it says so.
-      </p>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {SUGGESTIONS.map((s) => (
-          <button
-            key={s.q}
-            type="button"
-            onClick={() => onPick(s.q)}
-            className="group rounded-xl border border-border bg-surface/60 px-3.5 py-3 text-left transition-all hover:border-accent/50 hover:bg-surface hover:shadow-glow-sm"
-          >
-            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-fg-subtle group-hover:text-accent">
-              {s.why}
-            </span>
-            <span className="block text-xs leading-snug text-fg-muted group-hover:text-fg">{s.q}</span>
-          </button>
-        ))}
-      </div>
-      <p className="mt-5 text-2xs text-fg-subtle">
-        Signed in as <span className="font-mono text-fg-muted">{username}</span> with{" "}
-        <span className="text-fg-muted">{clearance}</span> clearance.
-      </p>
     </div>
   );
 }

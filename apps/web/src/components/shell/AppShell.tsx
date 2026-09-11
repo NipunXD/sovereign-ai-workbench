@@ -58,7 +58,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="flex h-header shrink-0 items-center gap-3 border-b border-border bg-surface px-3">
         <div className="flex items-center gap-2">
           <div
-            className="flex h-6 w-6 items-center justify-center rounded bg-accent text-2xs font-bold text-accent-fg"
+            className="brand-mark flex h-6 w-6 items-center justify-center rounded text-2xs font-bold text-accent-fg"
             aria-hidden
           >
             MW
@@ -115,7 +115,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <main className="min-w-0 flex-1 overflow-hidden">{children}</main>
+        <main className="app-canvas min-w-0 flex-1 overflow-hidden">{children}</main>
       </div>
     </div>
   );

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+import { KindGlyph } from "@/components/chat/ArtifactCard";
 import {
   Button,
   Chip,
@@ -135,9 +136,9 @@ export default function ApprovalsPage() {
               hint="Ask the workbench for a report or a workbook and it will appear here once approved."
             />
           ) : (
-            <ul className="divide-y divide-border">
+            <ul className="stagger grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3">
               {artifacts.data.map((artifact) => (
-                <ArtifactRow key={artifact.sha256} artifact={artifact} />
+                <ArtifactTile key={artifact.sha256} artifact={artifact} />
               ))}
             </ul>
           )}
@@ -223,41 +224,69 @@ function ApprovalRow({
   );
 }
 
-function ArtifactRow({ artifact }: { artifact: Artifact }) {
+function ArtifactTile({ artifact }: { artifact: Artifact }) {
   const [open, setOpen] = useState(false);
   const provenance = artifact.provenance;
   const sources = provenance.sources ?? [];
+  const approved = Boolean(provenance.approved_by);
 
   return (
-    <li className="p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <KindIcon kind={artifact.kind} />
-        <span className="min-w-0 flex-1 truncate text-xs font-medium">{artifact.filename}</span>
-        <StatusChip status={artifact.status} />
-        {provenance.has_uncertain_sources ? (
-          <Chip tone="warn">
-            <AlertTriangle size={9} /> uncertain source
-          </Chip>
-        ) : null}
-        <span className="tnum text-2xs text-fg-subtle">{formatBytes(artifact.size_bytes)}</span>
+    <li className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface/70 shadow-card transition-colors hover:border-border-strong">
+      <div className="flex items-start gap-3 p-3">
+        <KindGlyph kind={artifact.kind} size="lg" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-semibold text-fg" title={artifact.filename}>
+            {artifact.filename}
+          </p>
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-fg-subtle">
+            <span className="uppercase">{artifact.kind}</span>
+            <span className="tnum">{formatBytes(artifact.size_bytes)}</span>
+            <span className="tnum">
+              {sources.length} source{sources.length === 1 ? "" : "s"}
+            </span>
+            <span>{relativeTime(artifact.created_at)}</span>
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <StatusChip status={artifact.status} />
+            {provenance.has_uncertain_sources ? (
+              <Chip tone="warn">
+                <AlertTriangle size={9} /> scanned source
+              </Chip>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-auto flex items-center gap-1 border-t border-border px-2 py-1.5">
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}
-          className="rounded px-1.5 py-0.5 text-2xs text-fg-subtle hover:text-fg"
+          className="rounded px-1.5 py-1 text-2xs text-fg-subtle hover:bg-surface-raised hover:text-fg"
         >
-          provenance
+          {open ? "Hide provenance" : "Provenance"}
         </button>
+        <span className="ml-auto truncate text-2xs text-fg-subtle">
+          {approved ? (
+            <>
+              signed off by <span className="text-fg-muted">{provenance.approved_by}</span>
+            </>
+          ) : (
+            "awaiting sign-off"
+          )}
+        </span>
         <Button
           size="sm"
+          variant="primary"
           onClick={() => void downloadArtifact(artifact.sha256, artifact.filename)}
+          title="Download"
         >
           <Download size={12} />
         </Button>
       </div>
 
       {open ? (
-        <div className="mt-2 space-y-2 rounded border border-border bg-bg p-2 text-2xs">
-          <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
+        <div className="space-y-2 border-t border-border bg-bg/60 p-3 text-2xs">
+          <div className="grid gap-y-1">
             <Field label="Requested by" value={provenance.generated_by ?? "—"} />
             <Field
               label="Approved by"
@@ -273,7 +302,7 @@ function ArtifactRow({ artifact }: { artifact: Artifact }) {
               value={Object.values(provenance.models ?? {}).join(", ") || "—"}
               mono
             />
-            <Field label="Digest" value={(provenance.sha256 ?? "").slice(0, 24) || "—"} mono />
+            <Field label="Digest" value={(provenance.sha256 ?? artifact.sha256).slice(0, 24)} mono />
           </div>
 
           <div>
@@ -285,9 +314,7 @@ function ArtifactRow({ artifact }: { artifact: Artifact }) {
                 {sources.map((source) => (
                   <li key={source.title} className="flex items-baseline gap-2">
                     <span className="min-w-0 flex-1 truncate text-fg-muted">{source.title}</span>
-                    <span className="tnum shrink-0 text-fg-subtle">
-                      p{source.pages.join(", ")}
-                    </span>
+                    <span className="tnum shrink-0 text-fg-subtle">p{source.pages.join(", ")}</span>
                     {source.lowest_confidence < 0.85 ? (
                       <span className="tnum shrink-0 text-warn">
                         OCR {(source.lowest_confidence * 100).toFixed(0)}%
@@ -355,10 +382,5 @@ function StatusChip({ status }: { status: string }) {
 function ToolIcon({ tool }: { tool: string }) {
   if (tool.includes("code")) return <Terminal size={13} className="shrink-0 text-accent" />;
   if (tool.includes("xlsx")) return <FileSpreadsheet size={13} className="shrink-0 text-ok" />;
-  return <FileText size={13} className="shrink-0 text-info" />;
-}
-
-function KindIcon({ kind }: { kind: string }) {
-  if (kind === "xlsx") return <FileSpreadsheet size={13} className="shrink-0 text-ok" />;
   return <FileText size={13} className="shrink-0 text-info" />;
 }

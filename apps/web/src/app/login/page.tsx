@@ -2,19 +2,53 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ShieldCheck } from "lucide-react";
+import { ArrowRight, Cpu, Link2, ShieldCheck } from "lucide-react";
 
-import { Button, Input } from "@/components/ui/primitives";
+import { PipelineStrip } from "@/components/shell/PipelineStrip";
+import { Button, ClassificationBadge, Input } from "@/components/ui/primitives";
+import type { Classification } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { useSession } from "@/stores/session";
 
 /** Demo accounts, shown because the separation-of-duties story is the point:
  *  these roles deliberately cannot do each other's jobs. */
-const DEMO_ACCOUNTS = [
-  { username: "senior", label: "Senior Inspection Engineer", note: "restricted clearance, can run code" },
-  { username: "engineer", label: "Inspection Engineer", note: "confidential clearance" },
-  { username: "approver", label: "Maintenance Head", note: "approves, cannot generate" },
-  { username: "viewer", label: "Plant Operator", note: "internal clearance only" },
-  { username: "auditor", label: "Internal Audit", note: "reads the audit log, acts on nothing" },
+const DEMO_ACCOUNTS: Array<{
+  username: string;
+  label: string;
+  note: string;
+  clearance: Classification;
+}> = [
+  { username: "senior", label: "Senior Inspection Engineer", note: "generates documents, runs code", clearance: "restricted" },
+  { username: "engineer", label: "Inspection Engineer", note: "asks, retrieves, calculates", clearance: "confidential" },
+  { username: "approver", label: "Maintenance Head", note: "signs off — cannot generate", clearance: "confidential" },
+  { username: "viewer", label: "Plant Operator", note: "reads what operators may read", clearance: "internal" },
+  { username: "auditor", label: "Internal Audit", note: "reads the log, acts on nothing", clearance: "internal" },
+];
+
+const CLEARANCE_TONE: Record<Classification, string> = {
+  public: "text-classification-public",
+  internal: "text-classification-internal",
+  confidential: "text-classification-confidential",
+  restricted: "text-classification-restricted",
+};
+
+/** What the deployment can prove about itself, not what it promises. */
+const PROOFS = [
+  {
+    icon: Cpu,
+    title: "Open weights, on this hardware",
+    body: "Qwen and Llama-family models served by LM Studio and Ollama on the plant's own GPU. The model manifest is a file in the repo.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Zero egress, verifiable",
+    body: "The running system publishes the complete list of hosts it can reach. The header badge reads that list live and would turn red.",
+  },
+  {
+    icon: Link2,
+    title: "Second person, hash-chained",
+    body: "Documents and code wait for someone else's sign-off. Every event commits to the one before it, so history cannot be edited quietly.",
+  },
 ];
 
 export default function LoginPage() {
@@ -42,64 +76,117 @@ export default function LoginPage() {
     }
   }
 
-  return (
-    <div className="flex h-full items-center justify-center p-6">
-      <div className="w-full max-w-4xl">
-        <div className="grid gap-6 md:grid-cols-[1fr_1.1fr]">
-          <div className="flex flex-col justify-center">
-            <div className="mb-4 flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded bg-accent text-xs font-bold text-accent-fg">
-                MW
-              </div>
-              <div>
-                <h1 className="text-sm font-semibold">Sovereign AI Workbench</h1>
-                <p className="text-2xs text-fg-subtle">
-                  Mangalore Refinery and Petrochemicals Limited
-                </p>
-              </div>
-            </div>
+  const selected = DEMO_ACCOUNTS.find((a) => a.username === username);
 
-            <p className="text-sm leading-relaxed text-fg-muted">
-              Agentic AI for confidential industrial work, running entirely on
-              plant infrastructure.
+  return (
+    <div className="hero-canvas h-full overflow-y-auto">
+      <div className="mx-auto flex min-h-full w-full max-w-6xl flex-col justify-center px-6 py-10">
+        <div className="grid items-center gap-10 lg:grid-cols-[1.15fr_1fr]">
+          {/* --- the claim --- */}
+          <div className="stagger">
+            <p className="mb-5 flex flex-wrap items-center gap-2 text-2xs font-semibold uppercase tracking-[0.18em] text-fg-subtle">
+              <span className="brand-mark flex h-6 w-6 items-center justify-center rounded text-[10px] font-bold text-accent-fg">
+                MW
+              </span>
+              <span>Smart India Hackathon 2026</span>
+              <span aria-hidden>·</span>
+              <span>PS 26117</span>
+              <span aria-hidden>·</span>
+              <span>Team AIDUO</span>
             </p>
 
-            <div className="mt-4 flex items-start gap-2 rounded border border-ok/30 bg-ok/5 p-2.5">
-              <ShieldCheck size={14} className="mt-0.5 shrink-0 text-ok" />
-              <p className="text-2xs leading-relaxed text-fg-muted">
-                Every model runs locally on open weights. No document, query or
-                measurement is sent to an external service — the running system
-                reports the complete list of hosts it can reach.
+            <h1 className="text-4xl font-semibold leading-[1.05] tracking-tight sm:text-5xl">
+              <span className="wordmark">Sovereign</span> AI Workbench
+            </h1>
+            <p className="mt-4 max-w-lg text-base leading-relaxed text-fg-muted">
+              An agent that plans, reads the plant&apos;s own documents, runs the numbers, and hands
+              back an answer with the exact passage behind every claim — without a single byte
+              leaving the refinery.
+            </p>
+            <p className="mt-2 text-xs text-fg-subtle">
+              Built for Mangalore Refinery and Petrochemicals Limited · Crude Distillation Unit
+            </p>
+
+            <div className="mt-8 rounded-xl border border-border bg-surface/50 p-4 backdrop-blur-sm">
+              <p className="mb-4 text-2xs font-semibold uppercase tracking-wider text-fg-subtle">
+                How every answer is built
               </p>
+              <PipelineStrip />
             </div>
+
+            <ul className="mt-6 grid gap-3 sm:grid-cols-3">
+              {PROOFS.map((proof) => {
+                const Icon = proof.icon;
+                return (
+                  <li key={proof.title} className="rounded-lg border border-border bg-surface/40 p-3">
+                    <Icon size={15} className="text-accent" />
+                    <p className="mt-2 text-xs font-semibold text-fg">{proof.title}</p>
+                    <p className="mt-1 text-[11px] leading-relaxed text-fg-subtle">{proof.body}</p>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
 
-          <div className="panel p-5">
+          {/* --- the door --- */}
+          <div className="animate-fade-in-up rounded-2xl border border-border bg-surface/80 p-5 shadow-card backdrop-blur-sm">
+            <div className="mb-4">
+              <h2 className="text-sm font-semibold">Sign in</h2>
+              <p className="mt-0.5 text-2xs text-fg-subtle">
+                Pick a role to see what it is — and is not — allowed to do.
+              </p>
+            </div>
+
+            <ul className="stagger mb-4 grid gap-1.5">
+              {DEMO_ACCOUNTS.map((account) => (
+                <li key={account.username}>
+                  <button
+                    type="button"
+                    onClick={() => setUsername(account.username)}
+                    data-selected={username === account.username}
+                    className={cn(
+                      "role-card flex w-full items-center gap-3 py-2 pl-3.5 pr-2.5 hover:border-border-strong",
+                      CLEARANCE_TONE[account.clearance],
+                    )}
+                  >
+                    <span className="w-16 shrink-0 font-mono text-xs text-fg">{account.username}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-medium text-fg">{account.label}</span>
+                      <span className="block truncate text-[11px] text-fg-subtle">{account.note}</span>
+                    </span>
+                    <ClassificationBadge level={account.clearance} compact />
+                  </button>
+                </li>
+              ))}
+            </ul>
+
             <form onSubmit={submit} className="space-y-3">
-              <div>
-                <label htmlFor="username" className="mb-1 block text-2xs font-semibold uppercase tracking-wider text-fg-subtle">
-                  Username
-                </label>
-                <Input
-                  id="username"
-                  value={username}
-                  onChange={(event) => setUsername(event.target.value)}
-                  autoComplete="username"
-                  required
-                />
-              </div>
-              <div>
-                <label htmlFor="password" className="mb-1 block text-2xs font-semibold uppercase tracking-wider text-fg-subtle">
-                  Password
-                </label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  autoComplete="current-password"
-                  required
-                />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="username" className="mb-1 block text-2xs font-semibold uppercase tracking-wider text-fg-subtle">
+                    Username
+                  </label>
+                  <Input
+                    id="username"
+                    value={username}
+                    onChange={(event) => setUsername(event.target.value)}
+                    autoComplete="username"
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="password" className="mb-1 block text-2xs font-semibold uppercase tracking-wider text-fg-subtle">
+                    Password
+                  </label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    autoComplete="current-password"
+                    required
+                  />
+                </div>
               </div>
 
               {error ? (
@@ -108,39 +195,16 @@ export default function LoginPage() {
                 </p>
               ) : null}
 
-              <Button type="submit" variant="primary" className="w-full" disabled={busy}>
-                {busy ? "Signing in…" : "Sign in"}
+              <Button type="submit" variant="primary" className="h-9 w-full text-sm" disabled={busy}>
+                {busy ? "Signing in…" : `Enter as ${selected?.label ?? username}`}
+                {!busy ? <ArrowRight size={14} /> : null}
               </Button>
             </form>
 
-            <div className="mt-4 border-t border-border pt-3">
-              <p className="mb-2 text-2xs font-semibold uppercase tracking-wider text-fg-subtle">
-                Demo accounts
-              </p>
-              <ul className="space-y-1">
-                {DEMO_ACCOUNTS.map((account) => (
-                  <li key={account.username}>
-                    <button
-                      type="button"
-                      onClick={() => setUsername(account.username)}
-                      className="flex w-full items-baseline gap-2 rounded px-1.5 py-1 text-left transition-colors hover:bg-surface-raised"
-                    >
-                      <span className="w-16 shrink-0 font-mono text-xs text-accent">
-                        {account.username}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-2xs text-fg-muted">
-                        {account.label}
-                      </span>
-                      <span className="shrink-0 text-2xs text-fg-subtle">{account.note}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-2 px-1.5 text-2xs text-fg-subtle">
-                All demo accounts use the password{" "}
-                <span className="font-mono text-fg-muted">workbench123</span>.
-              </p>
-            </div>
+            <p className="mt-3 text-center text-2xs text-fg-subtle">
+              Demo password for every account:{" "}
+              <span className="font-mono text-fg-muted">workbench123</span>
+            </p>
           </div>
         </div>
       </div>

@@ -144,23 +144,27 @@ function Row({
   );
 }
 
-function KindGlyph({ kind }: { kind: string }) {
-  const base = "flex h-9 w-9 shrink-0 items-center justify-center rounded-md border";
+export function KindGlyph({ kind, size = "md" }: { kind: string; size?: "md" | "lg" }) {
+  const base = cn(
+    "flex shrink-0 items-center justify-center rounded-md border",
+    size === "lg" ? "h-12 w-12" : "h-9 w-9",
+  );
+  const glyph = size === "lg" ? 22 : 16;
   if (kind === "xlsx")
     return (
       <span className={cn(base, "border-ok/40 bg-ok/10 text-ok")}>
-        <FileSpreadsheet size={16} />
+        <FileSpreadsheet size={glyph} />
       </span>
     );
   if (kind === "pptx")
     return (
       <span className={cn(base, "border-accent/40 bg-accent/10 text-accent")}>
-        <Presentation size={16} />
+        <Presentation size={glyph} />
       </span>
     );
   return (
     <span className={cn(base, "border-info/40 bg-info/10 text-info")}>
-      <FileText size={16} />
+      <FileText size={glyph} />
     </span>
   );
 }

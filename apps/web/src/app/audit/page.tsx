@@ -19,7 +19,7 @@ import {
   PanelHeader,
   Spinner,
 } from "@/components/ui/primitives";
-import { api, getAccessToken } from "@/lib/api";
+import { ApiError, api, getAccessToken } from "@/lib/api";
 import type { AuditEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -43,8 +43,9 @@ export default function AuditPage() {
   const [decision, setDecision] = useState("");
   const [expanded, setExpanded] = useState<number | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ["audit-events", actor, action, decision],
+    retry: false,
     queryFn: () =>
       api.auditEvents({
         actor: actor || undefined,
@@ -79,6 +80,24 @@ export default function AuditPage() {
   }
 
   const denials = summary?.recent_denials ?? [];
+
+  // Refused, not empty. A page that says "no matching events" to someone the
+  // server has just turned away is lying to them about what happened.
+  if (error instanceof ApiError && error.status === 403) {
+    return (
+      <div className="flex h-full items-center justify-center p-6">
+        <div className="max-w-md rounded-xl border border-border bg-surface/70 p-6 text-center shadow-card">
+          <Ban size={22} className="mx-auto text-fg-subtle" />
+          <p className="mt-3 text-sm font-semibold">The audit log is not yours to read</p>
+          <p className="mt-1.5 text-xs leading-relaxed text-fg-muted">
+            Reading it needs the <span className="font-mono">audit:read</span> permission, which
+            the demo grants to Internal Audit and nobody else — the people who act are not the
+            people who review. This refusal was itself recorded.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full overflow-y-auto p-4">

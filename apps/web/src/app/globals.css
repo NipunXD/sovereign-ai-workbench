@@ -212,3 +212,126 @@
     font-size: 0.875rem;
   }
 }
+
+@layer components {
+  /* The application canvas: a faint dot grid for the whole shell to sit on,
+     and one soft amber glow high on the page — the panel light of a control
+     room, not a gradient poster. Both sit under everything and never move. */
+  .app-canvas {
+    background-color: hsl(var(--bg));
+    background-image:
+      radial-gradient(60rem 28rem at 18% -10%, hsl(var(--accent) / 0.09), transparent 65%),
+      radial-gradient(hsl(var(--border-strong) / 0.28) 0.7px, transparent 0.7px);
+    background-size: 100% 100%, 22px 22px;
+  }
+
+  /* The sign-in page pushes the same idea further: it is the one screen that
+     is allowed to be atmospheric, because nothing on it is being read for
+     numbers. */
+  .hero-canvas {
+    background-color: hsl(var(--bg));
+    background-image:
+      radial-gradient(50rem 32rem at 12% 20%, hsl(var(--accent) / 0.16), transparent 60%),
+      radial-gradient(40rem 30rem at 92% 88%, hsl(205 75% 55% / 0.08), transparent 60%),
+      linear-gradient(hsl(var(--border) / 0.35) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border) / 0.35) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 100%, 44px 44px, 44px 44px;
+    mask-image: none;
+  }
+
+  .wordmark {
+    background: linear-gradient(135deg, hsl(var(--accent)) 0%, hsl(45 95% 68%) 55%, hsl(var(--accent)) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .brand-mark {
+    background: linear-gradient(145deg, hsl(45 95% 66%), hsl(var(--accent)) 60%, hsl(24 90% 48%));
+    box-shadow:
+      0 0 0 1px hsl(var(--accent) / 0.35),
+      0 6px 16px -6px hsl(var(--accent) / 0.7);
+  }
+
+  /* --- the pipeline strip --- */
+  .pipeline-link {
+    position: absolute;
+    top: 1.25rem;
+    left: 50%;
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg, hsl(var(--border-strong)), hsl(var(--border)));
+    overflow: hidden;
+  }
+  .pipeline-link::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: 40%;
+    background: linear-gradient(90deg, transparent, hsl(var(--accent)), transparent);
+    animation: pipeline-travel 2.5s linear infinite;
+  }
+  .pipeline-node {
+    animation: pipeline-glow 2.5s ease-in-out infinite;
+  }
+  @keyframes pipeline-travel {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(260%); }
+  }
+  @keyframes pipeline-glow {
+    0%, 70%, 100% {
+      border-color: hsl(var(--border));
+      color: hsl(var(--fg-muted));
+      box-shadow: none;
+    }
+    12% {
+      border-color: hsl(var(--accent) / 0.8);
+      color: hsl(var(--accent));
+      box-shadow: 0 0 0 4px hsl(var(--accent) / 0.12), 0 0 18px hsl(var(--accent) / 0.35);
+    }
+  }
+
+  /* Cards on a landing surface arrive one after another, not all at once. */
+  .stagger > * {
+    animation: fade-in-up 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .stagger > *:nth-child(1) { animation-delay: 40ms; }
+  .stagger > *:nth-child(2) { animation-delay: 110ms; }
+  .stagger > *:nth-child(3) { animation-delay: 180ms; }
+  .stagger > *:nth-child(4) { animation-delay: 250ms; }
+  .stagger > *:nth-child(5) { animation-delay: 320ms; }
+  .stagger > *:nth-child(6) { animation-delay: 390ms; }
+
+  /* A role card on the sign-in page: the clearance colour runs down its left
+     edge so the five roles read as a ladder before a single word is read. */
+  .role-card {
+    @apply relative overflow-hidden rounded-lg border border-border bg-surface/70 text-left transition-all;
+  }
+  .role-card::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: currentColor;
+    opacity: 0.7;
+  }
+  .role-card[data-selected="true"] {
+    @apply border-accent/60 bg-surface;
+    box-shadow: 0 0 0 1px hsl(var(--accent) / 0.35), 0 10px 30px -18px hsl(var(--accent) / 0.6);
+  }
+
+  /* A stat tile: one number, one label, no chrome. */
+  .stat-tile {
+    @apply rounded-lg border border-border bg-surface/60 px-3 py-2.5;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pipeline-link::after,
+    .pipeline-node,
+    .stagger > * {
+      animation: none;
+    }
+  }
+}
