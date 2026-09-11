@@ -387,6 +387,15 @@ class IngestionPipeline:
 
         for page in ir.pages:
             result = ocr_results.get(page.page_no)
+            # A page that already has a text layer was never handed to OCR, so
+            # there is no OcrResult for it. Assessing the empty stand-in below
+            # reads as "no text was recognised" and escalates a perfectly good
+            # page — which costs a multi-minute vision call per page and, when
+            # the model is busy, times the whole ingest out. Measured: a native
+            # five-chunk PDF took 5m06s to ingest, all of it a VLM call on text
+            # the extractor had already read exactly.
+            if result is None and page.word_count:
+                continue
             block_types = frozenset(b.type for b in page.blocks)
             verdict = assess(
                 result or OcrResult(),

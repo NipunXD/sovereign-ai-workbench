@@ -1,0 +1,15 @@
+FIELD NOTE — V-1202 BOOT CORROSION
+Ref: INSP-2030-V1202
+Author: A. Pinto, Corrosion Engineer
+Date: 2030-02-02
+
+The January survey records 8.35 mm at CML-06 against a t-min of 7.50 mm.
+I do not agree with the twelve-month re-inspection interval proposed in
+section 4 of that report.
+
+Rate of loss at CML-06 is 2.45 mm over 14 months, which is 2.10 mm/year.
+At that rate the remaining margin of 0.85 mm is consumed in approximately
+five months, not twelve. The interval should be set at four months with a
+hold point before the 2031 turnaround.
+
+This note has not been countersigned by the Inspection Head.

@@ -217,7 +217,11 @@ class SpreadsheetExtractor:
         import pandas as pd
 
         started = time.perf_counter()
-        suffix = path.suffix.lower()
+        # The uploaded name, not the path. Blobs are content-addressed and have
+        # no extension, so branching on `path.suffix` sent every CSV into the
+        # Excel reader, which fails with "file format cannot be determined" —
+        # a file type the API advertises as supported and could never ingest.
+        suffix = Path(filename or path.name).suffix.lower()
 
         if suffix in {".csv", ".tsv"}:
             separator = "\t" if suffix == ".tsv" else ","
