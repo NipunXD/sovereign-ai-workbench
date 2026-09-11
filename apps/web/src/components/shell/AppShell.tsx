@@ -18,6 +18,7 @@ import { SovereigntyBar } from "@/components/shell/SovereigntyBar";
 import { SystemStatus } from "@/components/shell/SystemStatus";
 import { ClassificationBadge } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
+import { useRun } from "@/stores/run";
 import { useSession } from "@/stores/session";
 
 /** Nav entries are permission-gated. A destination a user cannot use is not
@@ -36,6 +37,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { principal, status, restore, logout, can } = useSession();
+  const running = useRun((s) => s.running);
 
   useEffect(() => {
     if (status === "loading") void restore();
@@ -70,6 +72,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
+          {running ? (
+            <Link
+              href="/chat"
+              className="flex h-6 items-center gap-1.5 rounded border border-accent/40 bg-accent/10 px-2 text-2xs font-semibold uppercase tracking-wider text-accent"
+              title="A run is in progress — it continues while you look at other pages"
+            >
+              <span className="h-1.5 w-1.5 animate-pulse-dot rounded-full bg-accent" aria-hidden />
+              run live
+            </Link>
+          ) : null}
           <SystemStatus />
           <SovereigntyBar />
           <div className="mx-1 h-5 w-px bg-border" aria-hidden />

@@ -78,6 +78,8 @@ function transform(node: React.ReactNode, byNumber: Map<number, Citation>, key: 
 /** The `[n]` chip. Hover previews the passage; click opens it in full. */
 function CitationChip({ citation }: { citation: Citation }) {
   const showCitation = useInspector((state) => state.showCitation);
+  const setHoverChunk = useInspector((state) => state.setHoverChunk);
+  const linked = useInspector((state) => state.hoverChunk === citation.chunk_id);
   const openViewer = useViewer((state) => state.open);
   const [hover, setHover] = useState(false);
   const shaky = citation.confidence < 0.85;
@@ -90,14 +92,22 @@ function CitationChip({ citation }: { citation: Citation }) {
           showCitation(citation);
           openViewer(citation);
         }}
-        onMouseEnter={() => setHover(true)}
-        onMouseLeave={() => setHover(false)}
+        onMouseEnter={() => {
+          setHover(true);
+          setHoverChunk(citation.chunk_id);
+        }}
+        onMouseLeave={() => {
+          setHover(false);
+          setHoverChunk(null);
+        }}
         className={cn(
           "citation-chip mx-0.5 inline-flex h-[1.2rem] min-w-[1.2rem] items-center justify-center rounded px-1",
           "font-mono text-2xs font-semibold transition-all",
           shaky
             ? "bg-warn/15 text-warn ring-1 ring-warn/40 hover:bg-warn/30"
             : "bg-accent/15 text-accent ring-1 ring-accent/30 hover:bg-accent/30 hover:ring-accent/60",
+          // Lit from the map: the pointer is on this passage over there.
+          linked && !hover && (shaky ? "bg-warn/35 ring-warn/80" : "bg-accent/40 ring-accent/90 shadow-glow-sm"),
         )}
         aria-label={`Citation ${citation.n}: ${citation.doc_title}, page ${citation.page_no}`}
       >
@@ -137,6 +147,8 @@ function CitationChip({ citation }: { citation: Citation }) {
 /** The reference list beneath an answer. */
 export function CitationList({ citations }: { citations: Citation[] }) {
   const showCitation = useInspector((state) => state.showCitation);
+  const setHoverChunk = useInspector((state) => state.setHoverChunk);
+  const hoverChunk = useInspector((state) => state.hoverChunk);
   const openViewer = useViewer((state) => state.open);
   if (!citations.length) return null;
 
@@ -157,7 +169,12 @@ export function CitationList({ citations }: { citations: Citation[] }) {
                 showCitation(citation);
                 openViewer(citation);
               }}
-              className="group flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-surface-raised/70"
+              onMouseEnter={() => setHoverChunk(citation.chunk_id)}
+              onMouseLeave={() => setHoverChunk(null)}
+              className={cn(
+                "group flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-surface-raised/70",
+                hoverChunk === citation.chunk_id && "bg-accent/[0.07]",
+              )}
             >
               <span className="mt-0.5 flex h-4.5 min-w-[1.15rem] items-center justify-center rounded bg-accent/15 px-1 font-mono text-2xs font-semibold text-accent ring-1 ring-accent/30">
                 {citation.n}

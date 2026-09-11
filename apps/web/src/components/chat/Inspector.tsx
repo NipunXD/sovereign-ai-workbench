@@ -4,6 +4,7 @@ import { Activity, FileSearch, Share2, X } from "lucide-react";
 
 import { EvidenceMap } from "@/components/chat/EvidenceMap";
 import { PassagePanel } from "@/components/chat/PassagePanel";
+import { PipelineStrip } from "@/components/shell/PipelineStrip";
 import { DocumentViewer } from "@/components/documents/DocumentViewer";
 import { TraceTimeline } from "@/components/trace/TraceTimeline";
 import { Spinner } from "@/components/ui/primitives";
@@ -107,11 +108,7 @@ export function Inspector({
             {trace.length ? (
               <TraceTimeline trace={trace} startedAt={message?.startedAt ?? Date.now()} />
             ) : (
-              <Empty
-                icon={<Activity size={20} />}
-                title="Nothing running"
-                hint="Routing, the plan, every retrieval and every tool call appear here as the agent works."
-              />
+              <Idle />
             )}
           </div>
         ) : tab === "evidence" ? (
@@ -151,6 +148,46 @@ export function Inspector({
         )}
       </div>
     </aside>
+  );
+}
+
+/** Before the first run: what this panel will show, and in what order. */
+function Idle() {
+  const rows: Array<{ icon: React.ReactNode; title: string; body: string }> = [
+    {
+      icon: <Activity size={13} />,
+      title: "Trace",
+      body: "Which model was chosen and why, the plan, every retrieval and every tool call — as they happen.",
+    },
+    {
+      icon: <Share2 size={13} />,
+      title: "Evidence",
+      body: "Everything that was read, drawn as a map. Cited passages carry their number; the rest are the ones it chose not to use.",
+    },
+    {
+      icon: <FileSearch size={13} />,
+      title: "Source",
+      body: "The exact passage behind a claim, and the page it sits on with the region outlined.",
+    },
+  ];
+  return (
+    <div className="flex h-full flex-col justify-center px-5 py-6">
+      <p className="mb-4 text-center text-2xs font-semibold uppercase tracking-wider text-fg-subtle">
+        Nothing running
+      </p>
+      <PipelineStrip compact />
+      <ul className="mt-6 space-y-2">
+        {rows.map((row) => (
+          <li key={row.title} className="flex gap-2.5 rounded-lg border border-border/70 bg-bg/40 px-3 py-2">
+            <span className="mt-0.5 text-fg-subtle">{row.icon}</span>
+            <span>
+              <span className="block text-xs font-semibold text-fg-muted">{row.title}</span>
+              <span className="block text-[11px] leading-snug text-fg-subtle">{row.body}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

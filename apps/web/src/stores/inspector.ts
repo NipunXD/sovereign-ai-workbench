@@ -32,6 +32,11 @@ export interface SelectedPassage {
 interface InspectorState {
   tab: InspectorTab;
   passage: SelectedPassage | null;
+  /** The passage under the pointer — in the answer or on the map. Both
+   *  surfaces light the same chunk, so a reader can hold a claim in one hand
+   *  and see where it sits in what was read with the other. */
+  hoverChunk: string | null;
+  setHoverChunk: (chunkId: string | null) => void;
   /** Within the source tab: the passage text, or the rendered page. */
   sourceMode: "passage" | "page";
   setTab: (tab: InspectorTab) => void;
@@ -45,6 +50,8 @@ export const useInspector = create<InspectorState>((set) => ({
   tab: "trace",
   passage: null,
   sourceMode: "passage",
+  hoverChunk: null,
+  setHoverChunk: (hoverChunk) => set({ hoverChunk }),
 
   setTab: (tab) => set({ tab }),
   setSourceMode: (sourceMode) => set({ sourceMode }),

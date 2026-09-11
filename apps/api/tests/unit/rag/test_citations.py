@@ -107,6 +107,18 @@ def test_snippet_is_truncated_for_the_popover() -> None:
     assert citation.snippet.endswith("…")
 
 
+def test_copied_source_tags_are_removed_but_the_quote_is_kept() -> None:
+    """Produced live: the model quoted a passage back inside the <source>
+    wrapper the evidence prompt uses, and the tags reached the screen."""
+    result = resolve_markers(
+        'It is 18.0 barg [1]. <source> [1] Report explicitly states "18.0 barg." </source>',
+        [item("a")],
+    )
+    assert "<source" not in result.text and "</source>" not in result.text
+    assert 'Report explicitly states "18.0 barg."' in result.text
+    assert result.text.startswith("It is 18.0 barg [1]. [1] Report")
+
+
 def test_strip_markers_leaves_clean_prose() -> None:
     assert strip_markers("Hold four hours [[cite:a]].") == "Hold four hours."
 

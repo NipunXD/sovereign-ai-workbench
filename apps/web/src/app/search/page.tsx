@@ -19,6 +19,15 @@ import { useViewer } from "@/stores/viewer";
  * same query as two users is also the clearest demonstration that
  * confidentiality is enforced in the search itself.
  */
+/** Queries that show the retriever off: a tag, a reading, a number, a name. */
+const EXAMPLES = [
+  "V-1201 depressurisation rate",
+  "CML-04 thickness",
+  "P-101A vibration",
+  "turnaround budget 2029",
+  "hold time before opening",
+];
+
 export default function SearchPage() {
   const [query, setQuery] = useState("");
   const { principal } = useSession();
@@ -117,11 +126,28 @@ export default function SearchPage() {
               />
             )
           ) : (
-            <EmptyState
-              icon={<SearchIcon size={20} />}
-              title="Search the corpus directly"
-              hint="Results show the exact passages retrieval returns, which retriever found each one, and the access filter applied — the same filter the agent works behind."
-            />
+            <div>
+              <EmptyState
+                icon={<SearchIcon size={20} />}
+                title="Search the corpus directly"
+                hint="Results show the exact passages retrieval returns, which retriever found each one, and the access filter applied — the same filter the agent works behind."
+              />
+              <div className="stagger mx-auto flex max-w-xl flex-wrap justify-center gap-1.5">
+                {EXAMPLES.map((example) => (
+                  <button
+                    key={example}
+                    type="button"
+                    onClick={() => {
+                      setQuery(example);
+                      search.mutate(example);
+                    }}
+                    className="rounded-full border border-border bg-surface/60 px-3 py-1 font-mono text-2xs text-fg-muted transition-colors hover:border-accent/50 hover:text-accent"
+                  >
+                    {example}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       </section>

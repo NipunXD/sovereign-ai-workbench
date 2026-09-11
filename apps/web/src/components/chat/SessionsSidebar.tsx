@@ -59,6 +59,12 @@ export function SessionsSidebar() {
     router.push("/chat");
   }
 
+  // On a projector at 1280 wide the answer column is what matters; the list
+  // is one click away. Decided after mount so the server and client agree.
+  useEffect(() => {
+    if (window.innerWidth < 1280) setCollapsed(true);
+  }, []);
+
   // ⌘/Ctrl+K starts a new session from anywhere in the chat.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

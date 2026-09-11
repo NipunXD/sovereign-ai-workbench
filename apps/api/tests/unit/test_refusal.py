@@ -97,6 +97,34 @@ class TestTheDangerousDirection:
             "The documents do not specify a purge duration, but they do not rule one out either."
         )
 
+    def test_a_cited_answer_followed_by_a_caveat_is_not_a_refusal(self) -> None:
+        # Produced live: a correct, cited figure, then a sentence shaped exactly
+        # like a refusal. The footer read "declined — not in the corpus".
+        assert not is_refusal(
+            "The design pressure of V-1201 is **18.0 barg**.\n\n"
+            "| Parameter | Value | Source |\n|---|---|---|\n"
+            "| Design Pressure | 18.0 barg | [1] |\n\n"
+            "This value is explicitly stated in the inspection report "
+            '(INSP-2029-V1201) under "Equipment Details" [1]. Other sources '
+            "describe operational procedures but do not specify design pressure."
+        )
+
+    def test_a_table_does_not_stretch_the_window(self) -> None:
+        # Rows have no full stops; before, three of them and the sentence after
+        # counted as one sentence and dragged a fourth-sentence caveat inside.
+        assert not is_refusal(
+            "The rate limit is 2 bar per minute [1].\n\n"
+            "| A | B |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |\n\n"
+            "Second point [1]. Third point [2]. The sources do not state a tolerance."
+        )
+
+    def test_a_restatement_before_a_refusal_still_refuses(self) -> None:
+        # A restatement cites nothing, so it does not count as an answer.
+        assert is_refusal(
+            "You asked for the purge duration used in the 2019 turnaround. "
+            "The indexed documents do not specify a purge duration."
+        )
+
     def test_a_late_caveat_does_not_retroactively_refuse(self) -> None:
         assert not is_refusal(
             "The depressurisation rate limit is 2 bar per minute [1]. The hold "

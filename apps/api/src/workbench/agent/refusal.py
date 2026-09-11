@@ -100,14 +100,37 @@ _ANY_NEGATION = re.compile(
     re.IGNORECASE,
 )
 
+#: A resolved citation marker. An answer that has already cited something
+#: before it gets to a limitation has answered; the limitation is a caveat.
+_CITATION = re.compile(r"\[\d+\]")
+
 #: How far in to look. Three sentences covers a refusal that first restates the
 #: question; beyond that it is an answer with a caveat.
 LEADING_SENTENCES = 3
 
 
+def _sentences(text: str) -> list[str]:
+    """Split into sentences, treating line breaks as boundaries too.
+
+    Answers are markdown. A table has no full stops, so splitting on
+    punctuation alone welded three table rows and the sentence after them
+    into one "sentence", which dragged a fourth-sentence caveat inside the
+    window. Rows, rules and headings are not prose and are dropped.
+    """
+    parts = re.split(r"(?<=[.!?])\s+|\n+", text.strip())
+    kept = []
+    for part in parts:
+        candidate = part.strip()
+        if candidate.startswith(("|", "#", "---")):
+            continue
+        if len(re.findall(r"[A-Za-z]", candidate)) < 3:
+            continue
+        kept.append(candidate)
+    return kept
+
+
 def _leading(text: str, sentences: int = LEADING_SENTENCES) -> str:
-    parts = re.split(r"(?<=[.!?])\s+", text.strip())
-    return " ".join(parts[:sentences])
+    return " ".join(_sentences(text)[:sentences])
 
 
 def _asserts_after_contrast(head: str) -> bool:
@@ -153,8 +176,19 @@ def is_refusal(text: str, sentences: int = LEADING_SENTENCES) -> bool:
         # An empty answer is a failure, not an honest refusal. Calling it one
         # would let a crashed synthesis step score as a correct abstention.
         return False
-    head = _leading(text, sentences)
-    matched = bool(
-        _SUBJECT_FIRST.search(head) or _PREDICATE_FIRST.search(head) or _STANDALONE.search(head)
-    )
-    return matched and not _asserts_after_contrast(head)
+    leading = _sentences(text)[:sentences]
+    for index, sentence in enumerate(leading):
+        if not (
+            _SUBJECT_FIRST.search(sentence)
+            or _PREDICATE_FIRST.search(sentence)
+            or _STANDALONE.search(sentence)
+        ):
+            continue
+        if _asserts_after_contrast(sentence):
+            continue
+        # "The design pressure is 18.0 barg [1]. Other sources do not specify
+        # it." The second sentence is shaped exactly like a refusal, and the
+        # answer is a good one. What separates it from a refusal that first
+        # restates the question is that a restatement cites nothing.
+        return not any(_CITATION.search(s) and not _ANY_NEGATION.search(s) for s in leading[:index])
+    return False

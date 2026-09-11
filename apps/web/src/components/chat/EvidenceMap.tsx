@@ -276,13 +276,15 @@ export function EvidenceMap({
   const [size, setSize] = useState({ width: 480, height: 420 });
   const graphRef = useRef<{ nodes: MapNode[]; edges: MapEdge[] }>({ nodes: [], edges: [] });
   const [, setFrame] = useState(0);
-  const [hover, setHover] = useState<string | null>(null);
+  const [localHover, setLocalHover] = useState<string | null>(null);
   const drag = useRef<{ id: string; dx: number; dy: number } | null>(null);
   const [view, setView] = useState({ x: 0, y: 0, k: 1 });
   const alphaRef = useRef(1);
   const maxScoreRef = useRef(1);
   const showCitation = useInspector((s) => s.showCitation);
   const showHit = useInspector((s) => s.showHit);
+  const linkedChunk = useInspector((s) => s.hoverChunk);
+  const setHoverChunk = useInspector((s) => s.setHoverChunk);
   const openDocument = useViewer((s) => s.openDocument);
 
   useEffect(() => {
@@ -341,7 +343,14 @@ export function EvidenceMap({
 
   const { nodes, edges } = graphRef.current;
   const byId = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
+  // The pointer on this map, or on a citation in the answer: one highlight.
+  const hover = localHover ?? (linkedChunk && byId.has(linkedChunk) ? linkedChunk : null);
   const hovered = hover ? byId.get(hover) : null;
+
+  function setHover(id: string | null) {
+    setLocalHover(id);
+    setHoverChunk(id && byId.get(id)?.kind === "passage" ? id : null);
+  }
 
   function toLocal(event: React.PointerEvent) {
     const rect = containerRef.current!.getBoundingClientRect();

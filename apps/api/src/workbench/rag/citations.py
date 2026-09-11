@@ -181,6 +181,9 @@ def build_evidence_prompt(evidence: list[EvidenceItem]) -> str:
     return f"<sources>\n{blocks}\n</sources>"
 
 
+_SOURCE_TAG = re.compile(r"</?source\b[^>]*>", re.IGNORECASE)
+
+
 def resolve_markers(text: str, evidence: list[EvidenceItem]) -> ResolvedAnswer:
     """Replace ``[[cite:ID]]`` markers with ``[n]`` and collect the citations.
 
@@ -228,7 +231,10 @@ def resolve_markers(text: str, evidence: list[EvidenceItem]) -> ResolvedAnswer:
             numbers.append(number_for(item))
         return "".join(f"[{n}]" for n in numbers)
 
-    resolved = MARKER_PATTERN.sub(replace, text)
+    # The evidence is shown to the model inside <source> blocks, and a model
+    # quoting a passage back sometimes copies the wrapper too. The tags are
+    # prompt scaffolding, not prose; the quoted text between them is kept.
+    resolved = MARKER_PATTERN.sub(replace, _SOURCE_TAG.sub("", text))
 
     # Removing a marker can leave " ." or a double space behind.
     resolved = re.sub(r"\s+([.,;:!?])", r"\1", resolved)

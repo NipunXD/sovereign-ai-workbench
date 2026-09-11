@@ -38,6 +38,20 @@ export function ChatWorkspace() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const switchedFor = useRef<string | null>(null);
 
+  // "/" focuses the composer from anywhere, as in every tool people already use.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const typing = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+      if (event.key === "/" && !typing) {
+        event.preventDefault();
+        textareaRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const active = messages.at(-1);
   const question = [...messages].reverse().find((m) => m.role === "user")?.text ?? "";
 
@@ -115,7 +129,7 @@ export function ChatWorkspace() {
                 if (event.key === "Enter" && !event.shiftKey) submit(event);
               }}
               rows={1}
-              placeholder="Ask about an SOP, an inspection reading, a drawing — or ask for a report"
+              placeholder="Ask about an SOP, an inspection reading, a drawing — or ask for a report   ( / to focus )"
               className="max-h-40 min-h-[1.75rem] flex-1 resize-none bg-transparent py-1 text-sm placeholder:text-fg-subtle focus:outline-none"
             />
             {running ? (
