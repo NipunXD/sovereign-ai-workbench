@@ -42,4 +42,7 @@ class EventName:
     #: than for a log. Not an error: the run continues and answers.
     LIMITATION = "limitation"
     ERROR = "error"
+    #: The request was refused by policy before any model ran. Distinct from a
+    #: refusal to answer: nothing was searched and nothing was generated.
+    POLICY_REFUSED = "policy_refused"
     RUN_FINISHED = "run_finished"

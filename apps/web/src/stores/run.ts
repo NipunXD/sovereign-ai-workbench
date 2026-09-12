@@ -33,6 +33,8 @@ export interface ChatMessage {
    *  next to the answer rather than in the trace: a refusal the person
    *  never sees is indistinguishable from a failure. */
   limitations: string[];
+  /** Set when the request was refused by policy before any model ran. */
+  policy: { category: string; message: string } | null;
   /** The plan, with each step's live state. Rendered as a stepper above the
    *  answer so "what is it doing right now" is answerable at a glance rather
    *  than by reading the trace. */
@@ -83,6 +85,7 @@ export function emptyAssistant(id: string, startedAt: number): ChatMessage {
     summary: null,
     status: "streaming",
     limitations: [],
+    policy: null,
     steps: [],
     artifacts: [],
     approval: null,

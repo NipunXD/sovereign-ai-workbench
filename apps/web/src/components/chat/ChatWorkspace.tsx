@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUp, Square } from "lucide-react";
+import { ArrowUp, ShieldAlert, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Answer, CitationList } from "@/components/chat/Answer";
@@ -189,7 +189,9 @@ function AssistantTurn({
         </div>
       ) : null}
 
-      {message.text ? (
+      {message.policy ? (
+        <PolicyRefusal policy={message.policy} />
+      ) : message.text ? (
         <Answer text={message.text} citations={message.citations} streaming={message.status === "streaming"} />
       ) : null}
 
@@ -228,7 +230,38 @@ function AssistantTurn({
 
       {message.status !== "streaming" ? <CitationList citations={message.citations} /> : null}
 
-      {message.summary ? <RunFooter summary={message.summary} validation={message.validation} /> : null}
+      {message.summary && !message.policy ? (
+        <RunFooter summary={message.summary} validation={message.validation} />
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * A request the workbench declined to take.
+ *
+ * Deliberately not styled like an answer and not like an error. Nothing went
+ * wrong and nothing was searched: a rule was applied, and saying which one —
+ * and that it was written down — is the honest version of a refusal. The
+ * category is shown because "recorded in the audit log" is checkable, and the
+ * auditor can find this exact event.
+ */
+function PolicyRefusal({ policy }: { policy: { category: string; message: string } }) {
+  return (
+    <div className="mt-1 flex gap-3 rounded-xl border border-danger/25 bg-danger/[0.05] p-4">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-danger/10 text-danger">
+        <ShieldAlert size={18} />
+      </span>
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-danger">Request refused</p>
+        <p className="mt-1 text-md leading-relaxed text-fg">{policy.message}</p>
+        <p className="mt-2.5 flex flex-wrap items-center gap-2 text-2xs text-fg-subtle">
+          <span className="rounded-full bg-danger/10 px-2 py-0.5 font-mono font-medium text-danger">
+            {policy.category.replace(/_/g, " ")}
+          </span>
+          Checked before any model ran · written to the audit log
+        </p>
+      </div>
     </div>
   );
 }

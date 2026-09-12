@@ -37,7 +37,11 @@ export function RunFooter({
   const figures = validation?.figures ?? [];
   const verified = figures.filter((f) => f.found).length;
   const unsupported = validation?.unsupported ?? [];
-  const invented = validation?.unresolved_citations.length ?? 0;
+  const invented = validation?.unresolved_citations?.length ?? 0;
+  // A run that ended early — refused by policy, or replayed from a trace
+  // written before a field existed — has no budget. Reading through it
+  // unguarded took the whole page down with an unhandled TypeError.
+  const toolCalls = summary.budget?.tool_calls_used ?? 0;
 
   const hasDetail = figures.length > 0 || unsupported.length > 0 || invented > 0;
 
@@ -57,7 +61,7 @@ export function RunFooter({
         <Stat icon={<Database size={12} />} label={`${summary.evidence_used} passages read`} />
         <Stat
           icon={<Wrench size={12} />}
-          label={`${summary.budget.tool_calls_used} tool call${summary.budget.tool_calls_used === 1 ? "" : "s"}`}
+          label={`${toolCalls} tool call${toolCalls === 1 ? "" : "s"}`}
         />
         <Stat icon={<Clock size={12} />} label={formatDuration(summary.wall_ms)} />
 

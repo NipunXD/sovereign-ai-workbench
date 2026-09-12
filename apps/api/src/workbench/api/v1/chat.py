@@ -33,8 +33,9 @@ from workbench.artifacts.records import persist_artifact
 from workbench.core.errors import NotFoundError
 from workbench.core.ids import prefixed_id
 from workbench.core.logging import get_logger
-from workbench.db.models import AuditAction, Conversation, RunStatus
+from workbench.db.models import AuditAction, AuditDecision, Conversation, RunStatus
 from workbench.db.session import session_scope
+from workbench.security import request_policy
 from workbench.security.audit import AuditLogger
 from workbench.security.rbac import Principal
 
@@ -146,6 +147,75 @@ def _finalise_in_background(
     task.add_done_callback(_FINALISERS.discard)
 
 
+async def _refused(
+    *,
+    run_id: str,
+    conversation_id: str,
+    principal: Principal,
+    message: str,
+    verdict: request_policy.PolicyVerdict,
+) -> AsyncIterator[str]:
+    """A refused request, recorded and replayable like any other turn.
+
+    It still opens and closes a run and still persists both messages, so the
+    conversation reads back correctly and the refusal is part of its history
+    rather than something that happened invisibly.
+    """
+    await open_run(
+        run_id=run_id, conversation_id=conversation_id, principal=principal, message=message
+    )
+    await persist_message(
+        conversation_id=conversation_id, role="user", content=message, run_id=run_id
+    )
+
+    stored: list[dict[str, Any]] = [
+        {
+            "name": EventName.RUN_STARTED,
+            "at_ms": 0,
+            "data": {"run_id": run_id, "conversation_id": conversation_id},
+        },
+        {
+            "name": EventName.POLICY_REFUSED,
+            "at_ms": 0,
+            "data": {"category": verdict.category, "message": verdict.message},
+        },
+        {
+            "name": EventName.ANSWER,
+            "at_ms": 0,
+            "data": {"text": verdict.message, "citations": []},
+        },
+        {
+            "name": EventName.RUN_FINISHED,
+            "at_ms": 0,
+            # Shaped like any other run_finished. A partial payload here
+            # crashed the footer, which reads budget.tool_calls_used without
+            # asking whether the run got far enough to have a budget.
+            "data": {
+                "status": "refused",
+                "wall_ms": 0,
+                "evidence_used": 0,
+                "budget": {"tool_calls_used": 0, "retrieve_loops": 0, "validate_loops": 0},
+            },
+        },
+    ]
+    for index, event in enumerate(stored):
+        yield format_sse(str(event["name"]), event["data"], seq=index)
+
+    await persist_message(
+        conversation_id=conversation_id,
+        role="assistant",
+        content=verdict.message,
+        run_id=run_id,
+        latency_ms=0,
+    )
+    await close_run(
+        run_id=run_id,
+        status=RunStatus.SUCCEEDED,
+        trace=stored,
+        validation={"policy_refused": verdict.category},
+    )
+
+
 @router.post("/chat/stream")
 async def chat_stream(
     payload: ChatRequest,
@@ -180,6 +250,37 @@ async def chat_stream(
     # What was said before, so a follow-up ("and for CML-06?") has something
     # to follow. Read before this turn is written.
     history = await recent_history(session, conversation_id) if payload.conversation_id else []
+
+    # The policy gate runs before anything is opened, routed or retrieved: a
+    # request to defeat a safety interlock should cost nothing and leave a
+    # record, not two minutes of GPU and a polite answer about the corpus.
+    verdict = request_policy.evaluate(payload.message)
+    if not verdict.allowed:
+        await audit.log(
+            AuditAction.POLICY_REFUSE,
+            decision=AuditDecision.DENY,
+            actor_user_id=principal.user_id,
+            actor_username=principal.username,
+            actor_roles=sorted(principal.roles),
+            run_id=run_id,
+            conversation_id=conversation_id,
+            resource_type="conversation",
+            resource_id=conversation_id,
+            reason=verdict.category,
+            metadata={"matched": verdict.matched, "message_preview": payload.message[:200]},
+        )
+        await session.commit()
+        return StreamingResponse(
+            _refused(
+                run_id=run_id,
+                conversation_id=conversation_id,
+                principal=principal,
+                message=payload.message,
+                verdict=verdict,
+            ),
+            media_type="text/event-stream",
+            headers=SSE_HEADERS,
+        )
 
     await audit.log(
         AuditAction.RUN_START,

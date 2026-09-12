@@ -57,6 +57,7 @@ class AuditAction:
     RUN_FINISH = "run.finish"
 
     RBAC_DENY = "rbac.deny"
+    POLICY_REFUSE = "policy.refuse"
     CONFIG_CHANGE = "admin.config_change"
     USER_MANAGE = "admin.user_manage"
 

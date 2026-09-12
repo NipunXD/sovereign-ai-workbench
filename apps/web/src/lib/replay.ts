@@ -136,6 +136,15 @@ export function applyEvent(
       return { finished: false };
     }
 
+    case "policy_refused":
+      run.patchLast({
+        policy: {
+          category: String(payload.category ?? ""),
+          message: String(payload.message ?? ""),
+        },
+      });
+      return { finished: false };
+
     case "citation":
       run.addCitation(payload as unknown as Citation);
       return { finished: false };
