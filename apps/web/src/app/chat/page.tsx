@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import { ChatWorkspace } from "@/components/chat/ChatWorkspace";
 import { useRun } from "@/stores/run";
@@ -26,8 +26,16 @@ export default function NewChatPage() {
   // page steers the URL — the saved-session page doing the same thing while
   // it was still loading the *other* conversation made the two fight, and
   // the screen flipped between them.
+  //
+  // Only an id that appears *after* this page mounts is followed. An id that
+  // was already in the store belongs to the conversation being left behind,
+  // and redirecting to it sent you straight back to it.
+  const arrivedWith = useRef(conversationId);
+
   useEffect(() => {
-    if (conversationId) router.replace(`/chat/${conversationId}`);
+    if (conversationId && conversationId !== arrivedWith.current) {
+      router.replace(`/chat/${conversationId}`);
+    }
   }, [conversationId, router]);
 
   return <ChatWorkspace />;

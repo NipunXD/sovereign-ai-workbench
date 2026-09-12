@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import { ChatWorkspace } from "@/components/chat/ChatWorkspace";
 import { EmptyState, Spinner } from "@/components/ui/primitives";
@@ -31,9 +31,20 @@ export default function SavedChatPage() {
     staleTime: 30_000,
   });
 
+  // Replayed at most once per conversation. Without this, clearing the store
+  // to start a new chat — which happens while this page is still mounted —
+  // flipped `needsLoad` back to true, the query cache still held this
+  // conversation, and it hydrated itself straight back in. The new chat then
+  // opened onto the id that had just been restored, so the New button looked
+  // like it was reloading the conversation you were trying to leave.
+  const replayed = useRef<string | null>(null);
+
   useEffect(() => {
-    if (detail.data && needsLoad && !running) hydrateConversation(detail.data);
-  }, [detail.data, needsLoad, running]);
+    if (!detail.data || !needsLoad || running) return;
+    if (replayed.current === id) return;
+    replayed.current = id;
+    hydrateConversation(detail.data);
+  }, [detail.data, needsLoad, running, id]);
 
   if (needsLoad && !detail.isError) {
     // Cached data can arrive before the hydration effect has run; showing
