@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { Maximize2, Minus, Plus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { Citation, RetrievalHit, TraceItem } from "@/lib/types";
@@ -71,6 +73,9 @@ const METHOD_COLOUR: Record<string, string> = {
 };
 
 const NEUTRAL_EDGE = "hsl(215 16% 60%)";
+
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 3;
 
 function methodColour(method?: string): string {
   return METHOD_COLOUR[method ?? ""] ?? NEUTRAL_EDGE;
@@ -285,9 +290,31 @@ export function EvidenceMap({
   const [, setFrame] = useState(0);
   const [localHover, setLocalHover] = useState<string | null>(null);
   const drag = useRef<{ id: string; dx: number; dy: number } | null>(null);
+  //: Panning the camera, as opposed to dragging a node. Held in a ref because
+  //: it updates on every pointer move and must not re-render on its own.
+  const pan = useRef<{ px: number; py: number; vx: number; vy: number } | null>(null);
+  const [panning, setPanning] = useState(false);
+  //: How far the pointer travelled since it went down. A click and the start
+  //: of a drag are the same event, so without this every attempt to move a
+  //: node ended in its document opening instead — which reads exactly like
+  //: dragging being broken.
+  const travel = useRef(0);
+  const downAt = useRef<{ x: number; y: number } | null>(null);
   const [view, setView] = useState({ x: 0, y: 0, k: 1 });
+  const viewRef = useRef(view);
+  viewRef.current = view;
   const alphaRef = useRef(1);
   const maxScoreRef = useRef(1);
+  //: The layout runs in its own space rather than in the panel's. The
+  //: inspector is ~430px wide and a dozen nodes crammed into that read as a
+  //: knot; given room to spread and then framed by `fit`, the same graph reads
+  //: as a structure. The camera is what adapts to the panel, not the layout.
+  const worldRef = useRef({ width: 640, height: 560 });
+  //: Set when the graph is rebuilt, cleared once the layout has stopped moving
+  //: and been framed. A timer cannot do this job: the simulation is still
+  //: spreading at 700ms, so framing it then framed a graph that no longer
+  //: existed a second later.
+  const needsFit = useRef(true);
   const showCitation = useInspector((s) => s.showCitation);
   const showHit = useInspector((s) => s.showHit);
   const linkedChunk = useInspector((s) => s.hoverChunk);
@@ -314,7 +341,11 @@ export function EvidenceMap({
   );
   useEffect(() => {
     const previous = new Map(graphRef.current.nodes.map((n) => [n.id, n]));
-    const next = buildGraph(question, trace, citations, size.width, size.height);
+    const expected =
+      1 + trace.reduce((n, t) => (t.kind === "retrieval" ? n + t.hits.length : n), 0) + citations.length;
+    const side = Math.max(420, Math.round(135 * Math.sqrt(Math.max(4, expected))));
+    worldRef.current = { width: side, height: Math.round(side * 0.82) };
+    const next = buildGraph(question, trace, citations, worldRef.current.width, worldRef.current.height);
     for (const node of next.nodes) {
       const old = previous.get(node.id);
       if (old && node.kind !== "query") {
@@ -323,6 +354,7 @@ export function EvidenceMap({
       }
     }
     graphRef.current = next;
+    needsFit.current = true;
     maxScoreRef.current =
       next.nodes.reduce((m, n) => Math.max(m, n.kind === "passage" ? (n.score ?? 0) : 0), 0) || 1;
     alphaRef.current = 1;
@@ -336,9 +368,15 @@ export function EvidenceMap({
     const loop = () => {
       const { nodes, edges } = graphRef.current;
       if (nodes.length && (alphaRef.current > 0.01 || drag.current)) {
-        tick(nodes, edges, size.width, size.height, alphaRef.current);
+        tick(nodes, edges, worldRef.current.width, worldRef.current.height, alphaRef.current);
         alphaRef.current = Math.max(0.005, alphaRef.current * 0.97);
         setFrame((f) => f + 1);
+      } else if (nodes.length && needsFit.current) {
+        // Settled. Frame it once, then leave the camera alone — a map that
+        // re-centres itself while someone is reading it is worse than one that
+        // never centres at all.
+        needsFit.current = false;
+        fitRef.current();
       } else if (running) {
         setFrame((f) => f + 1);
       }
@@ -361,23 +399,54 @@ export function EvidenceMap({
 
   function toLocal(event: React.PointerEvent) {
     const rect = containerRef.current!.getBoundingClientRect();
-    return {
-      x: (event.clientX - rect.left - view.x) / view.k,
-      y: (event.clientY - rect.top - view.y) / view.k,
-    };
+    const v = viewRef.current;
+    return { x: (event.clientX - rect.left - v.x) / v.k, y: (event.clientY - rect.top - v.y) / v.k };
   }
 
   function onPointerDown(node: MapNode, event: React.PointerEvent) {
+    // Otherwise the background handler starts a pan underneath the node drag
+    // and the graph moves twice as fast as the pointer.
+    event.stopPropagation();
+    travel.current = 0;
+    downAt.current = { x: event.clientX, y: event.clientY };
     if (node.kind === "query") return;
     const p = toLocal(event);
     drag.current = { id: node.id, dx: node.x - p.x, dy: node.y - p.y };
     node.fx = node.x;
     node.fy = node.y;
     alphaRef.current = Math.max(alphaRef.current, 0.3);
-    (event.target as Element).setPointerCapture(event.pointerId);
+    try {
+      (event.target as Element).setPointerCapture(event.pointerId);
+    } catch {
+      // A pointer that has already ended cannot be captured. The drag still
+      // works from the container's own move handler; only the guarantee that
+      // events keep arriving after the pointer leaves the node is lost.
+    }
+  }
+
+  /** Drag anywhere that is not a node: move the camera, not the graph. */
+  function onBackgroundPointerDown(event: React.PointerEvent) {
+    if (event.button !== 0 || drag.current) return;
+    travel.current = 0;
+    downAt.current = { x: event.clientX, y: event.clientY };
+    const v = viewRef.current;
+    pan.current = { px: event.clientX, py: event.clientY, vx: v.x, vy: v.y };
+    setPanning(true);
+    (event.currentTarget as Element).setPointerCapture(event.pointerId);
   }
 
   function onPointerMove(event: React.PointerEvent) {
+    if (downAt.current) {
+      travel.current = Math.max(
+        travel.current,
+        Math.abs(event.clientX - downAt.current.x) + Math.abs(event.clientY - downAt.current.y),
+      );
+    }
+    if (pan.current) {
+      const { px, py, vx, vy } = pan.current;
+      setView((v) => ({ ...v, x: vx + (event.clientX - px), y: vy + (event.clientY - py) }));
+      return;
+    }
     if (!drag.current) return;
     const node = byId.get(drag.current.id);
     if (!node) return;
@@ -388,27 +457,92 @@ export function EvidenceMap({
   }
 
   function onPointerUp() {
-    if (!drag.current) return;
-    const node = byId.get(drag.current.id);
-    if (node) {
-      node.fx = null;
-      node.fy = null;
+    if (pan.current) {
+      pan.current = null;
+      setPanning(false);
     }
+    if (!drag.current) return;
+    // The node keeps the position it was dropped at. Releasing the pin here —
+    // which is what this did — handed the node straight back to the springs,
+    // so it sprang home the instant the pointer lifted and dragging looked
+    // broken. Double-click a node to let the layout have it back.
     drag.current = null;
   }
 
-  function onWheel(event: React.WheelEvent) {
-    const rect = containerRef.current!.getBoundingClientRect();
-    const mx = event.clientX - rect.left;
-    const my = event.clientY - rect.top;
-    const factor = event.deltaY < 0 ? 1.1 : 1 / 1.1;
+  /** Give a pinned node back to the simulation. */
+  function release(node: MapNode, event: React.MouseEvent) {
+    event.stopPropagation();
+    node.fx = null;
+    node.fy = null;
+    alphaRef.current = Math.max(alphaRef.current, 0.35);
+  }
+
+  function zoomAt(mx: number, my: number, factor: number) {
     setView((v) => {
-      const k = Math.max(0.5, Math.min(2.5, v.k * factor));
+      const k = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, v.k * factor));
+      if (k === v.k) return v;
       return { k, x: mx - (mx - v.x) * (k / v.k), y: my - (my - v.y) * (k / v.k) };
     });
   }
 
+  function onWheel(event: React.WheelEvent) {
+    const rect = containerRef.current!.getBoundingClientRect();
+    zoomAt(event.clientX - rect.left, event.clientY - rect.top, event.deltaY < 0 ? 1.12 : 1 / 1.12);
+  }
+
+  /**
+   * Frame everything.
+   *
+   * The layout runs in its own coordinate space, so zooming used to push half
+   * the graph outside the SVG viewport with no way to reach it — there was no
+   * way to pan, only to drag individual nodes. This measures what actually
+   * exists and puts the camera where all of it is visible, which is also what
+   * "reset" should mean.
+   */
+  const fit = useCallback(() => {
+    const all = graphRef.current.nodes;
+    if (!all.length || !size.width) return;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const n of all) {
+      // A document node is mostly its caption. Measuring only the circle framed
+      // the graph so that every label ran off the edge of the panel — the
+      // titles are centred and up to 26 characters at 10px, so they reach far
+      // further sideways than the node they belong to.
+      const r = n.kind === "doc" ? 30 : n.kind === "query" ? 28 : 14;
+      const halfLabel =
+        n.kind === "doc" ? Math.max(r, truncate(n.label, 26).length * 3.3) : r;
+      minX = Math.min(minX, n.x - halfLabel);
+      maxX = Math.max(maxX, n.x + halfLabel);
+      minY = Math.min(minY, n.y - r);
+      maxY = Math.max(maxY, n.y + (n.kind === "doc" ? r + 18 : r));
+    }
+    const pad = 30;
+    const w = Math.max(1, maxX - minX);
+    const h = Math.max(1, maxY - minY);
+    const k = Math.max(
+      MIN_ZOOM,
+      Math.min(1.05, (size.width - pad * 2) / w, (size.height - pad * 2) / h),
+    );
+    setView({
+      k,
+      x: size.width / 2 - ((minX + maxX) / 2) * k,
+      y: size.height / 2 - ((minY + maxY) / 2) * k,
+    });
+  }, [size.width, size.height]);
+
+  // `fit` is called from the animation loop the moment the layout settles; the
+  // loop reads it through a ref so it does not need to be a dependency.
+  const fitRef = useRef(fit);
+  fitRef.current = fit;
+
+  const CLICK_SLOP = 5;
+
   function activate(node: MapNode) {
+    // A drag that happens to end on the node it started on is still a drag.
+    if (travel.current > CLICK_SLOP) return;
     if (node.kind === "passage" && node.hit) {
       if (node.citation) showCitation(node.citation);
       else showHit(node.hit, null);
@@ -440,13 +574,19 @@ export function EvidenceMap({
   return (
     <div
       ref={containerRef}
-      className={cn("relative h-full w-full select-none overflow-hidden evidence-canvas", className)}
+      className={cn(
+        "evidence-canvas relative h-full w-full select-none overflow-hidden",
+        panning ? "cursor-grabbing" : "cursor-grab",
+        className,
+      )}
       onWheel={onWheel}
+      onPointerDown={onBackgroundPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onPointerLeave={onPointerUp}
+      onPointerCancel={onPointerUp}
+      onDoubleClick={fit}
     >
-      <svg width={size.width} height={size.height} className="block">
+      <svg width={size.width} height={size.height} className="block touch-none">
         <defs>
           <filter id="node-glow" x="-60%" y="-60%" width="220%" height="220%">
             <feGaussianBlur stdDeviation="3.5" result="blur" />
@@ -506,6 +646,7 @@ export function EvidenceMap({
                   onPointerEnter={() => setHover(n.id)}
                   onPointerLeave={() => setHover(null)}
                   onClick={() => activate(n)}
+                  onDoubleClick={(event) => release(n, event)}
                 >
                   <circle
                     r={r + 6}
@@ -518,6 +659,7 @@ export function EvidenceMap({
                       n.cited ? "fill-accent/10 stroke-accent" : "fill-surface stroke-border-strong",
                     )}
                     strokeWidth={active ? 2 : 1.25}
+                    strokeDasharray={n.fx != null ? "3 2" : undefined}
                     filter={active ? "url(#node-glow)" : undefined}
                   />
                   <text
@@ -559,6 +701,7 @@ export function EvidenceMap({
                   onPointerEnter={() => setHover(n.id)}
                   onPointerLeave={() => setHover(null)}
                   onClick={() => activate(n)}
+                  onDoubleClick={(event) => release(n, event)}
                 >
                   {cited ? (
                     <circle r={13} fill={colour} fillOpacity={0.12} className={running ? "node-pulse" : undefined} />
@@ -654,9 +797,37 @@ export function EvidenceMap({
         </div>
       ) : null}
 
+      {/* camera controls */}
+      <div className="absolute right-2.5 top-2.5 flex flex-col overflow-hidden rounded-lg border border-border bg-surface shadow-sm">
+        <button
+          type="button"
+          onClick={() => zoomAt(size.width / 2, size.height / 2, 1.25)}
+          className="flex h-7 w-7 items-center justify-center text-fg-muted transition-colors hover:bg-surface-raised hover:text-fg"
+          title="Zoom in"
+        >
+          <Plus size={13} />
+        </button>
+        <button
+          type="button"
+          onClick={() => zoomAt(size.width / 2, size.height / 2, 1 / 1.25)}
+          className="flex h-7 w-7 items-center justify-center border-t border-border text-fg-muted transition-colors hover:bg-surface-raised hover:text-fg"
+          title="Zoom out"
+        >
+          <Minus size={13} />
+        </button>
+        <button
+          type="button"
+          onClick={fit}
+          className="flex h-7 w-7 items-center justify-center border-t border-border text-fg-muted transition-colors hover:bg-surface-raised hover:text-fg"
+          title="Fit everything in view (or double-click the background)"
+        >
+          <Maximize2 size={12} />
+        </button>
+      </div>
+
       {/* legend */}
-      <div className="pointer-events-none absolute bottom-2 left-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-border bg-surface/80 px-2 py-1 text-2xs text-fg-subtle backdrop-blur">
-        <span className="tnum">
+      <div className="pointer-events-none absolute bottom-2.5 left-2.5 right-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-border bg-surface/90 px-2.5 py-1.5 text-2xs text-fg-subtle backdrop-blur">
+        <span className="tnum font-medium text-fg-muted">
           {docs} doc{docs === 1 ? "" : "s"} · {passages} passage{passages === 1 ? "" : "s"} · {citations.length} cited
         </span>
         {(["hybrid", "dense", "sparse"] as const).map((m) => (
@@ -665,7 +836,10 @@ export function EvidenceMap({
             {m}
           </span>
         ))}
-        <span className="text-fg-subtle/70">drag · scroll to zoom</span>
+        <span className="ml-auto flex items-center gap-2">
+          <span className="hidden text-fg-subtle/70 sm:inline">drag to pan · double-click to fit</span>
+          <span className="tnum text-fg-subtle/80">{Math.round(view.k * 100)}%</span>
+        </span>
       </div>
     </div>
   );
