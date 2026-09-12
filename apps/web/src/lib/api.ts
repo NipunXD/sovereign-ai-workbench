@@ -8,6 +8,7 @@
  */
 
 import type {
+  EvalsReport,
   Approval,
   ConversationDetail,
   ConversationSummary,
@@ -252,6 +253,8 @@ export const api = {
     request<void>(`/conversations/${id}`, { method: "DELETE" }),
 
   // --- system ---------------------------------------------------------------
+
+  evals: () => request<EvalsReport>("/evals"),
 
   models: () => request<ModelsResponse>("/models"),
   readiness: () => request<ReadinessReport>("/health/ready"),

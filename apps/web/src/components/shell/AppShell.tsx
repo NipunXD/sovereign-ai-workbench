@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   FileText,
+  FlaskConical,
   LogOut,
   MessageSquare,
   PanelLeftClose,
@@ -90,6 +91,14 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
         permission: null,
         title: "Approvals",
         subtitle: "Generated documents wait here for a second person.",
+      },
+      {
+        href: "/evals",
+        label: "Evaluation",
+        icon: FlaskConical,
+        permission: null,
+        title: "Evaluation",
+        subtitle: "How accurate this system is, measured against a fixed set of questions.",
       },
       {
         href: "/audit",

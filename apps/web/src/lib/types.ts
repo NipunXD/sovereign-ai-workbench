@@ -476,3 +476,32 @@ export interface ConversationDetail {
   runs: StoredRun[];
   artifacts: Array<GeneratedArtifact & { run_id: string | null; status: string }>;
 }
+
+
+// --- evaluation harness -----------------------------------------------------
+
+export interface EvalMetric {
+  key: string;
+  value: number;
+  /** The bar this metric had to clear, e.g. ">= 0.85". Absent when tracked but not gated. */
+  threshold: string | null;
+  passed: boolean | null;
+  lower_is_better: boolean;
+}
+
+export interface EvalSuite {
+  suite: string;
+  blurb: string;
+  passed: boolean;
+  ran_at: string;
+  duration_s: number;
+  cases: number;
+  failed_cases: string[];
+  metrics: EvalMetric[];
+  error: string;
+}
+
+export interface EvalsReport {
+  suites: EvalSuite[];
+  never_run: string[];
+}
