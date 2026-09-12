@@ -75,19 +75,21 @@ const config: Config = {
         mono: ["ui-monospace", "SFMono-Regular", "SF Mono", "Menlo", "Consolas", "Liberation Mono", "monospace"],
       },
       fontSize: {
-        // Still a dense product, but every step gained leading. The old scale
-        // set 11px text on 16px lines across whole panels, which is a
-        // spreadsheet, not an interface.
-        "2xs": ["0.6875rem", { lineHeight: "1rem", letterSpacing: "0.01em" }],
-        xs: ["0.75rem", { lineHeight: "1.125rem" }],
-        sm: ["0.8125rem", { lineHeight: "1.25rem" }],
-        base: ["0.875rem", { lineHeight: "1.375rem" }],
-        md: ["0.9375rem", { lineHeight: "1.5rem" }],
-        lg: ["1.0625rem", { lineHeight: "1.625rem", letterSpacing: "-0.01em" }],
-        xl: ["1.25rem", { lineHeight: "1.75rem", letterSpacing: "-0.015em" }],
-        "2xl": ["1.5rem", { lineHeight: "2rem", letterSpacing: "-0.02em" }],
-        "3xl": ["1.875rem", { lineHeight: "2.25rem", letterSpacing: "-0.025em" }],
-        "4xl": ["2.25rem", { lineHeight: "2.5rem", letterSpacing: "-0.03em" }],
+        // Raised a step across the board after an evaluation round where the
+        // judges could not read the small text from the room. The smallest
+        // label was 11px, used in 129 places — legible on the laptop it was
+        // built on and not from four metres away through a projector. The
+        // density is unchanged; every size simply starts one step higher.
+        "2xs": ["0.75rem", { lineHeight: "1.0625rem", letterSpacing: "0.005em" }],
+        xs: ["0.8125rem", { lineHeight: "1.1875rem" }],
+        sm: ["0.875rem", { lineHeight: "1.3125rem" }],
+        base: ["0.9375rem", { lineHeight: "1.4375rem" }],
+        md: ["1rem", { lineHeight: "1.5625rem" }],
+        lg: ["1.125rem", { lineHeight: "1.6875rem", letterSpacing: "-0.01em" }],
+        xl: ["1.375rem", { lineHeight: "1.875rem", letterSpacing: "-0.015em" }],
+        "2xl": ["1.625rem", { lineHeight: "2.125rem", letterSpacing: "-0.02em" }],
+        "3xl": ["2rem", { lineHeight: "2.375rem", letterSpacing: "-0.025em" }],
+        "4xl": ["2.5rem", { lineHeight: "2.75rem", letterSpacing: "-0.03em" }],
       },
       borderRadius: {
         DEFAULT: "0.375rem",

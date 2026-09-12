@@ -61,7 +61,7 @@ export function PipelineStrip({
               {stage.label}
             </span>
             {!compact ? (
-              <span className="mt-0.5 px-1 text-[10px] leading-snug text-fg-subtle">{stage.note}</span>
+              <span className="mt-0.5 px-1 text-2xs leading-snug text-fg-subtle">{stage.note}</span>
             ) : null}
           </li>
         );

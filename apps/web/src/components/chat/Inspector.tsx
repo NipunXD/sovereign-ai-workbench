@@ -180,7 +180,7 @@ function Idle() {
             <span className="mt-0.5 text-fg-subtle">{row.icon}</span>
             <span>
               <span className="block text-xs font-semibold text-fg-muted">{row.title}</span>
-              <span className="block text-[11px] leading-snug text-fg-subtle">{row.body}</span>
+              <span className="block text-xs leading-snug text-fg-subtle">{row.body}</span>
             </span>
           </li>
         ))}

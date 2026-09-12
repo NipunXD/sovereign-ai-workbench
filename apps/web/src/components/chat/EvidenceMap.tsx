@@ -837,8 +837,8 @@ export function EvidenceMap({
           </span>
         ))}
         <span className="ml-auto flex items-center gap-2">
-          <span className="hidden text-fg-subtle/70 sm:inline">drag to pan · double-click to fit</span>
-          <span className="tnum text-fg-subtle/80">{Math.round(view.k * 100)}%</span>
+          <span className="hidden text-fg-subtle sm:inline">drag to pan · double-click to fit</span>
+          <span className="tnum font-medium text-fg-subtle">{Math.round(view.k * 100)}%</span>
         </span>
       </div>
     </div>

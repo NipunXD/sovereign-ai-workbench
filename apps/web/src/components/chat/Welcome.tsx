@@ -92,7 +92,7 @@ export function Welcome({ onPick }: { onPick: (q: string) => void }) {
                 <Icon size={16} />
               </span>
               <span className="min-w-0">
-                <span className="block text-[10px] font-semibold uppercase tracking-wider text-fg-subtle group-hover:text-accent">
+                <span className="block text-2xs font-semibold uppercase tracking-wider text-fg-subtle group-hover:text-accent">
                   {s.why}
                 </span>
                 <span className="mt-1 block text-sm font-medium leading-snug text-fg">{s.q}</span>

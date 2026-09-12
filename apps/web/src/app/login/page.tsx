@@ -85,7 +85,7 @@ export default function LoginPage() {
           {/* --- the claim --- */}
           <div className="stagger">
             <p className="mb-5 flex flex-wrap items-center gap-2 text-2xs font-semibold uppercase tracking-[0.18em] text-fg-subtle">
-              <span className="brand-mark flex h-6 w-6 items-center justify-center rounded text-[10px] font-bold text-accent-fg">
+              <span className="brand-mark flex h-6 w-6 items-center justify-center rounded text-2xs font-bold text-accent-fg">
                 MW
               </span>
               <span>Smart India Hackathon 2026</span>
@@ -121,7 +121,7 @@ export default function LoginPage() {
                   <li key={proof.title} className="rounded-xl border border-border bg-surface p-4 shadow-xs">
                     <Icon size={15} className="text-accent" />
                     <p className="mt-2 text-xs font-semibold text-fg">{proof.title}</p>
-                    <p className="mt-1 text-[11px] leading-relaxed text-fg-subtle">{proof.body}</p>
+                    <p className="mt-1 text-xs leading-relaxed text-fg-subtle">{proof.body}</p>
                   </li>
                 );
               })}
@@ -152,7 +152,7 @@ export default function LoginPage() {
                     <span className="w-16 shrink-0 font-mono text-xs text-fg">{account.username}</span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-xs font-medium text-fg">{account.label}</span>
-                      <span className="block truncate text-[11px] text-fg-subtle">{account.note}</span>
+                      <span className="block truncate text-xs text-fg-subtle">{account.note}</span>
                     </span>
                     <ClassificationBadge level={account.clearance} compact />
                   </button>

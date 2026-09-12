@@ -50,7 +50,7 @@ export function RunStepper({ steps, running }: { steps: StepProgress[]; running:
               <span className="max-w-[9rem] truncate">
                 {step.tool ? step.tool.replace("artifact.", "") : label(step)}
               </span>
-              {elapsed ? <span className="tnum text-[10px] opacity-70">{elapsed}</span> : null}
+              {elapsed ? <span className="tnum text-2xs opacity-70">{elapsed}</span> : null}
             </div>
             {index < steps.length - 1 ? (
               <span

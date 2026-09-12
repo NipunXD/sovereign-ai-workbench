@@ -258,7 +258,7 @@ function SessionRow({
               onClick={onArchive}
               onBlur={() => setConfirming(false)}
               disabled={busy}
-              className="rounded bg-danger/20 px-1.5 py-0.5 text-[10px] font-medium text-danger"
+              className="rounded bg-danger/20 px-1.5 py-0.5 text-2xs font-medium text-danger"
               title="Click again to archive"
             >
               archive?
