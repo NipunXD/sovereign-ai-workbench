@@ -1,16 +1,27 @@
 "use client";
 
-import { Clock, Database, Wrench } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Clock, Database, Hash, Wrench, X } from "lucide-react";
+import { useState } from "react";
 
 import { cn, formatDuration } from "@/lib/utils";
-import type { RunSummary, ValidationReport } from "@/lib/types";
+import type { CheckedFigure, RunSummary, ValidationReport } from "@/lib/types";
 
 /**
- * The line under an answer that says how much to trust it.
+ * How much to trust this answer, and why.
  *
- * The grounding figure is drawn as a ring rather than printed, because it is
- * the one number a reader should take in before reading anything else, and a
- * ring at 40% looks different from one at 95% from across the room.
+ * Three different questions, deliberately kept apart rather than averaged into
+ * one score:
+ *
+ *  - Is each claim cited? — the grounding ring.
+ *  - Does each cited passage exist? — invented references, removed and counted.
+ *  - **Did the numbers come from the documents?** — every measurement in the
+ *    answer looked for, character for character, in the passage it cites.
+ *
+ * The third is the one an inspector actually asks, and the one the other two
+ * cannot answer: a model can attach a real citation to a figure it invented,
+ * and a citation-presence check passes that answer happily. It is also the
+ * only one of the three a reader can confirm by eye — the source panel is one
+ * click away, and the number is either on that page or it is not.
  */
 export function RunFooter({
   summary,
@@ -19,29 +30,106 @@ export function RunFooter({
   summary: RunSummary;
   validation: ValidationReport | null;
 }) {
+  const [open, setOpen] = useState(false);
+
   const refusal = validation?.is_refusal ?? false;
   const grounded = validation ? Math.round(validation.grounded_ratio * 100) : null;
+  const figures = validation?.figures ?? [];
+  const verified = figures.filter((f) => f.found).length;
+  const unsupported = validation?.unsupported ?? [];
+  const invented = validation?.unresolved_citations.length ?? 0;
+
+  const hasDetail = figures.length > 0 || unsupported.length > 0 || invented > 0;
 
   return (
-    <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-3 text-2xs text-fg-subtle">
-      {refusal ? (
-        <span className="flex items-center gap-1.5 rounded-full bg-warn/10 px-2.5 py-1 font-semibold text-warn ring-1 ring-inset ring-warn/20">
-          declined — not in the corpus
-        </span>
-      ) : grounded !== null ? (
-        <GroundingRing value={grounded} />
-      ) : null}
-      <Stat icon={<Database size={11} />} label={`${summary.evidence_used} passages read`} />
-      <Stat
-        icon={<Wrench size={11} />}
-        label={`${summary.budget.tool_calls_used} tool call${summary.budget.tool_calls_used === 1 ? "" : "s"}`}
-      />
-      <Stat icon={<Clock size={11} />} label={formatDuration(summary.wall_ms)} />
-      {validation?.unresolved_citations.length ? (
-        <span className="text-danger">
-          {validation.unresolved_citations.length} invented reference
-          {validation.unresolved_citations.length === 1 ? "" : "s"} removed
-        </span>
+    <div className="mt-4 border-t border-border pt-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-2xs text-fg-subtle">
+        {refusal ? (
+          <span className="flex items-center gap-1.5 rounded-full bg-warn/10 px-2.5 py-1 font-semibold text-warn ring-1 ring-inset ring-warn/20">
+            declined — not in the corpus
+          </span>
+        ) : grounded !== null ? (
+          <GroundingRing value={grounded} />
+        ) : null}
+
+        {figures.length ? <FigureBadge verified={verified} total={figures.length} /> : null}
+
+        <Stat icon={<Database size={12} />} label={`${summary.evidence_used} passages read`} />
+        <Stat
+          icon={<Wrench size={12} />}
+          label={`${summary.budget.tool_calls_used} tool call${summary.budget.tool_calls_used === 1 ? "" : "s"}`}
+        />
+        <Stat icon={<Clock size={12} />} label={formatDuration(summary.wall_ms)} />
+
+        {invented ? (
+          <span className="font-medium text-danger">
+            {invented} invented reference{invented === 1 ? "" : "s"} removed
+          </span>
+        ) : null}
+
+        {hasDetail ? (
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="ml-auto flex items-center gap-1 rounded-md px-1.5 py-0.5 font-medium text-fg-subtle transition-colors hover:bg-surface-raised hover:text-fg"
+          >
+            <ChevronDown size={12} className={cn("transition-transform", open && "rotate-180")} />
+            {open ? "Hide check" : "How this was checked"}
+          </button>
+        ) : null}
+      </div>
+
+      {open && hasDetail ? (
+        <div className="mt-3 space-y-3 rounded-xl border border-border bg-surface-raised/40 p-3.5">
+          {figures.length ? (
+            <section>
+              <p className="section-label mb-2 flex items-center gap-1.5">
+                <Hash size={11} /> Figures in this answer
+              </p>
+              <ul className="space-y-1">
+                {figures.map((figure) => (
+                  <FigureRow key={`${figure.value}-${figure.unit}`} figure={figure} />
+                ))}
+              </ul>
+              <p className="mt-2 text-2xs leading-relaxed text-fg-subtle">
+                Each measurement is searched for in the passage it cites, exactly as written.
+                A figure not found there was either calculated during the run or is not in the
+                documents — open the source and check it.
+              </p>
+            </section>
+          ) : null}
+
+          {unsupported.length ? (
+            <section className={figures.length ? "border-t border-border pt-3" : undefined}>
+              <p className="section-label mb-2 flex items-center gap-1.5 text-warn">
+                <AlertTriangle size={11} />
+                {unsupported.length} passage{unsupported.length === 1 ? "" : "s"} with no citation
+              </p>
+              <ul className="space-y-1.5">
+                {unsupported.map((text) => (
+                  <li
+                    key={text.slice(0, 48)}
+                    className="rounded-lg border-l-2 border-warn/50 bg-warn/[0.06] px-3 py-2 text-xs leading-relaxed text-fg-muted"
+                  >
+                    {plain(text)}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
+          {invented ? (
+            <section className="border-t border-border pt-3">
+              <p className="section-label mb-1.5 flex items-center gap-1.5 text-danger">
+                <X size={11} /> {invented} reference{invented === 1 ? "" : "s"} pointed at nothing
+              </p>
+              <p className="text-2xs leading-relaxed text-fg-subtle">
+                The model cited a passage that was never retrieved. Those markers were removed
+                from the answer rather than shown — a reference to nothing looks like evidence.
+              </p>
+            </section>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
@@ -49,11 +137,66 @@ export function RunFooter({
 
 function Stat({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
-    <span className="flex items-center gap-1 tnum">
+    <span className="tnum flex items-center gap-1.5">
       {icon}
       {label}
     </span>
   );
+}
+
+function FigureBadge({ verified, total }: { verified: number; total: number }) {
+  const all = verified === total;
+  return (
+    <span
+      className={cn(
+        "flex items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold ring-1 ring-inset",
+        all ? "bg-ok/10 text-ok ring-ok/20" : "bg-warn/10 text-warn ring-warn/20",
+      )}
+      title="Measurements found character-for-character in a cited passage"
+    >
+      {all ? <Check size={11} /> : <AlertTriangle size={11} />}
+      <span className="tnum">
+        {verified}/{total}
+      </span>
+      figure{total === 1 ? "" : "s"} in sources
+    </span>
+  );
+}
+
+function FigureRow({ figure }: { figure: CheckedFigure }) {
+  return (
+    <li className="flex items-baseline gap-2 text-xs">
+      <span
+        className={cn(
+          "flex h-4 w-4 shrink-0 items-center justify-center rounded-full",
+          figure.found ? "bg-ok/15 text-ok" : "bg-warn/15 text-warn",
+        )}
+        aria-hidden
+      >
+        {figure.found ? <Check size={10} /> : <AlertTriangle size={9} />}
+      </span>
+      <span className="tnum font-mono font-medium text-fg">{figure.text}</span>
+      <span className="min-w-0 flex-1 truncate text-fg-subtle">
+        {figure.found ? (
+          <>
+            found in {figure.sources.length === 1 ? "source" : "sources"}{" "}
+            {figure.sources.map((n) => `[${n}]`).join(" ")}
+          </>
+        ) : (
+          "not found in any cited source"
+        )}
+      </span>
+    </li>
+  );
+}
+
+/** The answer is markdown; these excerpts are quoted, so drop the syntax. */
+function plain(text: string): string {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/(^|\s)[*_](\S.*?\S)[*_](\s|$)/g, "$1$2$3")
+    .replace(/`([^`]+)`/g, "$1")
+    .trim();
 }
 
 export function GroundingRing({ value, size = 22 }: { value: number; size?: number }) {
@@ -63,7 +206,10 @@ export function GroundingRing({ value, size = 22 }: { value: number; size?: numb
   const mid = value >= 50;
   const tone = good ? "text-ok" : mid ? "text-warn" : "text-danger";
   return (
-    <span className={cn("flex items-center gap-1.5 font-medium", tone)} title="Share of the answer that carries a citation">
+    <span
+      className={cn("flex items-center gap-1.5 font-semibold", tone)}
+      title="Share of the answer's claims that carry a citation"
+    >
       <svg width={size} height={size} className="-rotate-90">
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" strokeOpacity={0.18} strokeWidth={2.5} />
         <circle

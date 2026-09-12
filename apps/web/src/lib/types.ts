@@ -252,9 +252,22 @@ export interface ApprovalState {
   comment: string | null;
 }
 
+/** One measurement from an answer, checked against the passage it cites. */
+export interface CheckedFigure {
+  /** As written in the answer, e.g. "18.0 barg". */
+  text: string;
+  value: string;
+  unit: string;
+  /** Whether this number appears in a cited passage, character for character. */
+  found: boolean;
+  /** Citation numbers whose passage contains it. */
+  sources: number[];
+}
+
 export interface ValidationReport {
   grounded_ratio: number;
   unsupported: string[];
+  figures: CheckedFigure[];
   unresolved_citations: string[];
   schema_errors: string[];
   is_refusal: boolean;

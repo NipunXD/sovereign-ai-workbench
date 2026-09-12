@@ -20,6 +20,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
 
+from workbench.agent import numerics
 from workbench.agent.artifact_intent import FORMAT_NAMES, detect_format, requested_artifact
 from workbench.agent.deferred import execute_approved, to_storable
 from workbench.agent.prompts import (
@@ -1127,6 +1128,14 @@ class AgentRunner:
         import re
 
         report = ValidationReport(unresolved_citations=list(resolved.unresolved))
+
+        # Figures are checked even on an answer that fails every other test:
+        # "where did that number come from" is the question worth answering
+        # regardless of how well the paragraph around it is cited.
+        report.figures = [
+            f.as_dict() for f in numerics.verify(resolved.text, self._cited_text(state, resolved))
+        ]
+
         sentences = [
             s.strip() for s in re.split(r"(?<=[.!?])\s+", resolved.text) if len(s.strip()) > 25
         ]
@@ -1149,6 +1158,21 @@ class AgentRunner:
 
         report.grounded_ratio, report.unsupported = self._coverage(resolved.text)
         return report
+
+    @staticmethod
+    def _cited_text(state: AgentState, resolved: Any) -> dict[int, str]:
+        """The full passage behind each citation number, for figure checking.
+
+        The snippet shown in the UI is truncated; a figure quoted from the end
+        of a long chunk would read as unverified against it. This uses the
+        whole retrieved text.
+        """
+        by_chunk = {item.chunk_id: item.text for item in state.get("evidence", [])}
+        return {
+            citation.n: by_chunk[citation.chunk_id]
+            for citation in resolved.citations
+            if citation.chunk_id in by_chunk
+        }
 
     @staticmethod
     def _coverage(text: str) -> tuple[float, list[str]]:

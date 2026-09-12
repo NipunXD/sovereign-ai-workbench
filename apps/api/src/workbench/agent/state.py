@@ -123,6 +123,9 @@ class ValidationReport:
 
     grounded_ratio: float = 1.0
     unsupported: list[str] = field(default_factory=list)
+    #: Every measurement in the answer, and whether the passage it cites
+    #: actually contains that number. See workbench.agent.numerics.
+    figures: list[dict[str, Any]] = field(default_factory=list)
     #: Citation markers referring to chunks that were never retrieved.
     unresolved_citations: list[str] = field(default_factory=list)
     schema_errors: list[str] = field(default_factory=list)
@@ -137,6 +140,7 @@ class ValidationReport:
         return {
             "grounded_ratio": round(self.grounded_ratio, 3),
             "unsupported": self.unsupported,
+            "figures": self.figures,
             "unresolved_citations": self.unresolved_citations,
             "schema_errors": self.schema_errors,
             "is_refusal": self.is_refusal,
