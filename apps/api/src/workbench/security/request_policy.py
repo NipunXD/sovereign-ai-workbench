@@ -37,6 +37,7 @@ class PolicyCategory:
     """Why a request was refused. Stored on the audit record."""
 
     SAFETY_BYPASS = "safety_bypass"
+    SABOTAGE = "sabotage"
     CREDENTIALS = "credentials"
     INTRUSION = "intrusion"
     EXFILTRATION = "exfiltration"
@@ -76,7 +77,44 @@ _INTENT = (
     r"let\s+me|help\s+me|show\s+me\s+how"
 )
 
+#: Things in the plant that can be attacked. Kept broad, because the rules that
+#: use it also require an attack verb — "the unit" on its own is every second
+#: question anyone asks here.
+_TARGETS = (
+    r"unit|plant|refinery|vessel|tank|pipeline|facility|column|reactor|site|"
+    r"terminal|storage|line|cdu|compressor|furnace|system"
+)
+
+#: Attacking the plant physically. Each alternative is a verb form, never a
+#: noun, because the nouns are ordinary vocabulary here: a bomb calorimeter is
+#: a fuel-testing instrument, "lower explosive limit" is on every gas test, and
+#: a blast wall is a safety feature. Matching "bomb" or "explosive" as words
+#: would refuse a quarter of the corpus.
+_ATTACK = (
+    r"bomb(?!\s*calorimeter)|blow\s+up|detonate|sabotage|torch\b|set\s+fire\s+to|"
+    r"deliberately\s+(?:rupture|overpressur\w+|damage)|poison|contaminate\s+the|"
+    r"cause\s+an?\s+(?:explosion|fire|leak|release|rupture)|start\s+a\s+fire"
+)
+
+#: Asking how to do something, as opposed to asking what it is.
+_HOWTO = (
+    r"how\s+(?:to|do\s+i|can\s+i|would\s+i|do\s+we|can\s+we)|ways?\s+to|"
+    r"best\s+way\s+to|help\s+me\s+to|steps?\s+to|guide\s+to"
+)
+
 _RULES: tuple[tuple[str, re.Pattern[str], str], ...] = (
+    (
+        PolicyCategory.SABOTAGE,
+        re.compile(rf"\b(?:{_ATTACK})\b[^.?!]{{0,30}}\b(?:the\s+)?(?:{_TARGETS})\b", re.IGNORECASE),
+        "This asks how to cause harm to the plant. The workbench will not help with that, "
+        "and the request has been recorded.",
+    ),
+    (
+        PolicyCategory.SABOTAGE,
+        re.compile(rf"\b(?:{_HOWTO})\b[^.?!]{{0,25}}\b(?:{_ATTACK})\b", re.IGNORECASE),
+        "This asks how to cause harm to the plant. The workbench will not help with that, "
+        "and the request has been recorded.",
+    ),
     (
         PolicyCategory.SAFETY_BYPASS,
         re.compile(rf"\b(?:{_DEFEAT})\b[^.?!]{{0,40}}\b(?:{_PROTECTIONS})\b", re.IGNORECASE),
@@ -120,7 +158,13 @@ _RULES: tuple[tuple[str, re.Pattern[str], str], ...] = (
     (
         PolicyCategory.INTRUSION,
         re.compile(
-            r"\b(?:hack|break)\s+into\b|\bgain\s+(?:unauthorised|unauthorized|admin|root)\s+access\b"
+            # "hack" needs no "into". \b keeps it off "hackathon", where a word
+            # character follows — which matters rather a lot in this repository.
+            r"\bhack(?:ing|s|ed)?\b[^.?!]{0,30}"
+            rf"\b(?:into|the\s+)?(?:{_TARGETS}|network|scada|plc|dcs|hmi|server|"
+            r"control|account|database|historian)\b"
+            rf"|\b(?:{_HOWTO})\b[^.?!]{{0,20}}\bhack(?:ing|s)?\b"
+            r"|\b(?:hack|break)\s+into\b|\bgain\s+(?:unauthorised|unauthorized|admin|root)\s+access\b"
             r"|\b(?:exploit|attack|breach|penetrate|compromise)\b[^.?!]{0,40}"
             r"\b(?:scada|plc|dcs|hmi|historian|network|server|system|control\s+system)\b"
             r"|\b(?:escalate\s+privileg|brute[\s-]?force|sql\s+inject)\w*",
