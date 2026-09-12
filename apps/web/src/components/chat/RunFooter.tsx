@@ -23,9 +23,9 @@ export function RunFooter({
   const grounded = validation ? Math.round(validation.grounded_ratio * 100) : null;
 
   return (
-    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border pt-2.5 text-2xs text-fg-subtle">
+    <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-3 text-2xs text-fg-subtle">
       {refusal ? (
-        <span className="flex items-center gap-1.5 rounded-full border border-warn/40 bg-warn/10 px-2 py-0.5 font-medium text-warn">
+        <span className="flex items-center gap-1.5 rounded-full bg-warn/10 px-2.5 py-1 font-semibold text-warn ring-1 ring-inset ring-warn/20">
           declined — not in the corpus
         </span>
       ) : grounded !== null ? (

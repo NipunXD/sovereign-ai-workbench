@@ -37,8 +37,8 @@ export default function AdminPage() {
   const residency = models.residency;
 
   return (
-    <div className="h-full overflow-y-auto p-4">
-      <div className="mx-auto max-w-6xl space-y-4">
+    <div className="h-full overflow-y-auto p-5">
+      <div className="mx-auto max-w-6xl space-y-5">
         <div className="grid gap-4 lg:grid-cols-3">
           <Panel className="lg:col-span-2">
             <PanelHeader

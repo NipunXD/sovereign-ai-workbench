@@ -102,15 +102,15 @@ export function SessionsSidebar() {
   }
 
   return (
-    <aside className="flex w-[15.5rem] shrink-0 flex-col border-r border-border bg-surface">
-      <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-border px-2">
-        <span className="text-2xs font-semibold uppercase tracking-wider text-fg-subtle">Sessions</span>
+    <aside className="flex w-[16rem] shrink-0 flex-col border-r border-border bg-surface">
+      <div className="flex h-header shrink-0 items-center gap-1.5 border-b border-border px-3">
+        <span className="section-label">Sessions</span>
         <span className="ml-auto flex items-center gap-0.5">
           <button
             type="button"
             onClick={startNew}
             disabled={running}
-            className="flex h-7 items-center gap-1 rounded-md bg-accent/15 px-2 text-2xs font-medium text-accent transition-colors hover:bg-accent/25 disabled:opacity-40"
+            className="flex h-7 items-center gap-1.5 rounded-lg bg-accent px-2.5 text-2xs font-semibold text-accent-fg shadow-xs transition-colors hover:bg-accent-strong disabled:opacity-40"
             title="New session (⌘K)"
           >
             <MessageSquarePlus size={12} /> New
@@ -127,12 +127,12 @@ export function SessionsSidebar() {
       </div>
 
       <label className="relative m-2 block">
-        <Search size={12} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-fg-subtle" />
+        <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-subtle" />
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search sessions"
-          className="h-7 w-full rounded-md border border-border bg-bg pl-6 pr-2 text-2xs placeholder:text-fg-subtle focus:border-accent/60 focus:outline-none"
+          className="h-8 w-full rounded-lg border border-border bg-surface pl-7 pr-2 text-xs shadow-xs placeholder:text-fg-subtle focus:border-accent/60 focus:outline-none focus:ring-4 focus:ring-accent/10"
         />
       </label>
 
@@ -144,7 +144,7 @@ export function SessionsSidebar() {
         ) : (
           groups.map((group) => (
             <div key={group.label} className="mb-2">
-              <p className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-subtle/80">
+              <p className="section-label px-2.5 pb-1.5 pt-2">
                 {group.label}
               </p>
               <ul className="space-y-0.5">
@@ -199,8 +199,8 @@ function SessionRow({
   return (
     <li
       className={cn(
-        "group relative rounded-md transition-colors",
-        active ? "bg-accent/10 ring-1 ring-accent/30" : "hover:bg-surface-raised",
+        "group relative rounded-lg transition-colors",
+        active ? "bg-accent-muted ring-1 ring-inset ring-accent/20" : "hover:bg-surface-raised",
       )}
     >
       {editing ? (
@@ -224,11 +224,11 @@ function SessionRow({
           </button>
         </div>
       ) : (
-        <Link href={`/chat/${item.id}`} className="block px-2 py-1.5">
-          <span className={cn("block truncate text-xs", active ? "font-medium text-fg" : "text-fg-muted group-hover:text-fg")}>
+        <Link href={`/chat/${item.id}`} className="block px-2.5 py-2">
+          <span className={cn("block truncate text-xs", active ? "font-semibold text-accent" : "font-medium text-fg-muted group-hover:text-fg")}>
             {item.title}
           </span>
-          <span className="mt-0.5 flex items-center gap-1.5 text-[10px] text-fg-subtle">
+          <span className="mt-1 flex items-center gap-1.5 text-2xs text-fg-subtle">
             <span className="tnum">{relativeTime(item.updated_at)}</span>
             <span aria-hidden>·</span>
             <span className="tnum">{item.message_count} msg</span>

@@ -31,7 +31,7 @@ export function ApprovalBanner({ approval }: { approval: ApprovalState }) {
 
   if (approval.status === "pending") {
     return (
-      <div className="animate-fade-in-up mt-3 overflow-hidden rounded-lg border border-accent/40 bg-accent/[0.06]">
+      <div className="animate-fade-in-up mt-4 overflow-hidden rounded-xl border border-accent/40 bg-accent/[0.06]">
         <div className="flex items-start gap-3 px-3 py-2.5">
           <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-accent/50 bg-accent/15 text-accent">
             <ShieldCheck size={14} />
@@ -84,7 +84,7 @@ export function ApprovalBanner({ approval }: { approval: ApprovalState }) {
   return (
     <div
       className={cn(
-        "animate-fade-in-up mt-3 flex items-center gap-2.5 rounded-lg border px-3 py-2 text-xs",
+        "animate-fade-in-up mt-4 flex items-center gap-2.5 rounded-xl border px-3 py-2 text-xs",
         approved ? "border-ok/40 bg-ok/[0.07] text-fg" : "border-danger/40 bg-danger/[0.07] text-fg",
       )}
     >

@@ -117,7 +117,7 @@ function CitationChip({ citation }: { citation: Citation }) {
       {hover ? (
         <span
           role="tooltip"
-          className="citation-card pointer-events-none absolute left-0 top-full z-30 mt-1.5 w-72 rounded-md border border-border-strong bg-surface p-2.5 text-left text-2xs shadow-2xl"
+          className="citation-card pointer-events-none absolute left-0 top-full z-30 mt-2 w-80 rounded-xl border border-border bg-surface p-3 text-left text-2xs shadow-popover"
         >
           <span className="flex items-baseline gap-1.5">
             <span className="min-w-0 flex-1 truncate font-semibold text-fg">{citation.doc_title}</span>
@@ -153,10 +153,10 @@ export function CitationList({ citations }: { citations: Citation[] }) {
   if (!citations.length) return null;
 
   return (
-    <div className="mt-3 rounded-lg border border-border bg-bg/40">
-      <p className="flex items-center gap-2 border-b border-border px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-fg-subtle">
+    <div className="mt-4 overflow-hidden rounded-xl border border-border bg-surface-raised/40">
+      <p className="flex items-center gap-2 border-b border-border bg-surface-raised/60 px-3.5 py-2 text-2xs font-semibold uppercase tracking-wider text-fg-subtle">
         Sources
-        <span className="tnum rounded bg-surface-raised px-1 py-px font-medium normal-case tracking-normal">
+        <span className="tnum rounded-full bg-surface px-1.5 font-semibold normal-case tracking-normal ring-1 ring-inset ring-border">
           {citations.length}
         </span>
       </p>

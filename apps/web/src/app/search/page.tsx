@@ -41,27 +41,27 @@ export default function SearchPage() {
   return (
     <div className="flex h-full">
       <section className="flex min-w-0 flex-1 flex-col">
-        <div className="shrink-0 border-b border-border bg-surface px-4 py-3">
+        <div className="shrink-0 border-b border-border bg-surface px-5 py-3.5">
           <form
             onSubmit={(event) => {
               event.preventDefault();
               if (query.trim()) search.mutate(query.trim());
             }}
-            className="flex items-center gap-2"
+            className="mx-auto flex max-w-4xl items-center gap-2"
           >
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search the indexed corpus — try an equipment tag like V-1201"
-              className="flex-1"
+              className="h-10 flex-1 text-md"
             />
-            <Button type="submit" variant="primary" disabled={!query.trim() || search.isPending}>
+            <Button type="submit" variant="primary" size="lg" disabled={!query.trim() || search.isPending}>
               {search.isPending ? <Spinner /> : <SearchIcon size={12} />} Search
             </Button>
           </form>
 
           {search.data ? (
-            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-2xs">
+            <div className="mx-auto mt-2.5 flex max-w-4xl flex-wrap items-center gap-1.5 text-2xs">
               <span className="text-fg-subtle">Applied to your clearance:</span>
               <Chip tone="accent">{search.data.access_filter}</Chip>
               <span className="text-fg-subtle">
@@ -71,7 +71,7 @@ export default function SearchPage() {
           ) : null}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
           {search.isPending ? (
             <div className="flex justify-center py-10">
               <Spinner className="text-fg-subtle" />
@@ -82,13 +82,13 @@ export default function SearchPage() {
             </p>
           ) : search.data ? (
             search.data.hits.length ? (
-              <ol className="space-y-2">
+              <ol className="mx-auto max-w-4xl space-y-3">
                 {search.data.hits.map((hit, index) => (
                   <li key={hit.chunk_id}>
                     <button
                       type="button"
                       onClick={() => openDocument(hit.doc_id, hit.page_from)}
-                      className="panel w-full p-3 text-left transition-colors hover:border-border-strong"
+                      className="card w-full p-4 text-left shadow-xs transition-all duration-150 hover:-translate-y-0.5 hover:shadow-card"
                     >
                       <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
                         <span className="tnum text-2xs text-fg-subtle">#{index + 1}</span>
@@ -112,7 +112,7 @@ export default function SearchPage() {
                           {hit.section_path.join(" › ")}
                         </p>
                       ) : null}
-                      <p className="line-clamp-3 whitespace-pre-wrap text-xs leading-snug text-fg-muted">
+                      <p className="line-clamp-3 whitespace-pre-wrap text-sm leading-relaxed text-fg-muted">
                         {hit.text}
                       </p>
                     </button>
@@ -141,7 +141,7 @@ export default function SearchPage() {
                       setQuery(example);
                       search.mutate(example);
                     }}
-                    className="rounded-full border border-border bg-surface/60 px-3 py-1 font-mono text-2xs text-fg-muted transition-colors hover:border-accent/50 hover:text-accent"
+                    className="rounded-full border border-border bg-surface px-3 py-1.5 font-mono text-2xs text-fg-muted shadow-xs transition-colors hover:border-accent/50 hover:bg-accent-muted hover:text-accent"
                   >
                     {example}
                   </button>

@@ -59,14 +59,21 @@ interface MapEdge {
   weight: number;
 }
 
+//: Mid-tone and saturated on purpose: these are drawn as literal values inside
+//: SVG, where a CSS custom property in a presentation attribute does not
+//: resolve, so each one has to be legible against both the light ground and
+//: the dark one. Everything that *can* be a token — surfaces, borders, text —
+//: uses a Tailwind class instead.
 const METHOD_COLOUR: Record<string, string> = {
-  hybrid: "hsl(33 95% 58%)",
-  dense: "hsl(205 75% 55%)",
-  sparse: "hsl(150 60% 45%)",
+  hybrid: "hsl(243 75% 62%)",
+  dense: "hsl(200 90% 45%)",
+  sparse: "hsl(160 75% 36%)",
 };
 
+const NEUTRAL_EDGE = "hsl(215 16% 60%)";
+
 function methodColour(method?: string): string {
-  return METHOD_COLOUR[method ?? ""] ?? "hsl(215 12% 48%)";
+  return METHOD_COLOUR[method ?? ""] ?? NEUTRAL_EDGE;
 }
 
 /** Fold the run's retrieval trace and its citations into nodes and edges. */
@@ -449,8 +456,8 @@ export function EvidenceMap({
             </feMerge>
           </filter>
           <radialGradient id="query-fill">
-            <stop offset="0%" stopColor="hsl(33 95% 68%)" />
-            <stop offset="100%" stopColor="hsl(33 95% 50%)" />
+            <stop offset="0%" stopColor="hsl(243 85% 70%)" />
+            <stop offset="100%" stopColor="hsl(245 70% 52%)" />
           </radialGradient>
         </defs>
 
@@ -464,7 +471,7 @@ export function EvidenceMap({
             const cited = passage.n != null;
             const involved =
               hover != null && (hover === a.id || hover === b.id || hovered?.docId === a.id || hovered?.docId === b.id);
-            const colour = edge.kind === "retrieval" ? methodColour(edge.method) : "hsl(215 12% 48%)";
+            const colour = edge.kind === "retrieval" ? methodColour(edge.method) : NEUTRAL_EDGE;
             const width = edge.kind === "retrieval" ? 0.8 + edge.weight * 2.2 : 1;
             return (
               <line
@@ -500,30 +507,34 @@ export function EvidenceMap({
                   onPointerLeave={() => setHover(null)}
                   onClick={() => activate(n)}
                 >
-                  <circle r={r + 6} fill="hsl(222 18% 12%)" stroke={n.cited ? "hsl(33 95% 58% / 0.35)" : "hsl(222 14% 28%)"} strokeWidth={1} />
+                  <circle
+                    r={r + 6}
+                    className={cn("fill-bg", n.cited ? "stroke-accent/25" : "stroke-border")}
+                    strokeWidth={1}
+                  />
                   <circle
                     r={r}
-                    fill={n.cited ? "hsl(222 16% 20%)" : "hsl(222 16% 15%)"}
-                    stroke={n.cited ? "hsl(33 95% 58%)" : "hsl(215 12% 40%)"}
+                    className={cn(
+                      n.cited ? "fill-accent/10 stroke-accent" : "fill-surface stroke-border-strong",
+                    )}
                     strokeWidth={active ? 2 : 1.25}
                     filter={active ? "url(#node-glow)" : undefined}
                   />
                   <text
                     textAnchor="middle"
                     dy="0.35em"
-                    fontSize={9}
-                    fontWeight={600}
-                    fill={n.cited ? "hsl(33 95% 68%)" : "hsl(215 14% 65%)"}
-                    className="pointer-events-none font-mono"
+                    fontSize={9.5}
+                    fontWeight={700}
+                    className={cn("pointer-events-none font-mono", n.cited ? "fill-accent" : "fill-fg-subtle")}
                   >
                     {n.passages}
                   </text>
                   <text
                     textAnchor="middle"
-                    y={r + 16}
-                    fontSize={9.5}
-                    fill="hsl(215 14% 72%)"
-                    className="pointer-events-none"
+                    y={r + 17}
+                    fontSize={10}
+                    fontWeight={500}
+                    className="pointer-events-none fill-fg-muted"
                   >
                     {truncate(n.label, 26)}
                   </text>
@@ -554,8 +565,9 @@ export function EvidenceMap({
                   ) : null}
                   <circle
                     r={cited ? 8 : 5.5}
-                    fill={cited ? colour : "hsl(222 16% 16%)"}
-                    stroke={shaky ? "hsl(38 92% 55%)" : colour}
+                    fill={cited ? colour : undefined}
+                    className={cited ? undefined : "fill-surface"}
+                    stroke={shaky ? "hsl(32 95% 44%)" : colour}
                     strokeWidth={active ? 2.5 : cited ? 1.5 : 1.25}
                     strokeDasharray={shaky ? "2 1.5" : undefined}
                     opacity={cited ? 1 : 0.7}
@@ -567,7 +579,7 @@ export function EvidenceMap({
                       dy="0.35em"
                       fontSize={8.5}
                       fontWeight={700}
-                      fill="hsl(24 40% 8%)"
+                      fill="#fff"
                       className="pointer-events-none font-mono"
                     >
                       {n.n}
@@ -582,14 +594,14 @@ export function EvidenceMap({
             .filter((n) => n.kind === "query")
             .map((n) => (
               <g key={n.id} transform={`translate(${n.x} ${n.y})`}>
-                <circle r={26} fill="hsl(33 95% 58% / 0.10)" className="node-pulse" />
+                <circle r={26} className="node-pulse fill-accent/10" />
                 <circle r={17} fill="url(#query-fill)" filter="url(#node-glow)" />
                 <text
                   textAnchor="middle"
                   dy="0.35em"
                   fontSize={10}
                   fontWeight={700}
-                  fill="hsl(24 40% 8%)"
+                  fill="#fff"
                   className="pointer-events-none"
                 >
                   Q

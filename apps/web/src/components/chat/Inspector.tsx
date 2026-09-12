@@ -55,16 +55,16 @@ export function Inspector({
   const hasSource = Boolean(passage || viewerDocId);
 
   return (
-    <aside className="inspector flex w-[26rem] shrink-0 flex-col border-l border-border bg-surface 2xl:w-[32rem]">
-      <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border px-2">
+    <aside className="inspector flex w-[27rem] shrink-0 flex-col border-l border-border bg-surface 2xl:w-[33rem]">
+      <div className="flex h-header shrink-0 items-center gap-1 border-b border-border px-3">
         {tabs.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
             className={cn(
-              "relative flex h-7 items-center gap-1.5 rounded-md px-2.5 text-2xs font-semibold uppercase tracking-wider transition-colors",
-              tab === t.id ? "bg-surface-raised text-fg" : "text-fg-subtle hover:text-fg-muted",
+              "relative flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors",
+              tab === t.id ? "bg-accent-muted text-accent" : "text-fg-subtle hover:bg-surface-raised hover:text-fg",
             )}
           >
             {t.icon}
@@ -72,16 +72,14 @@ export function Inspector({
             {t.badge !== undefined ? (
               <span
                 className={cn(
-                  "tnum rounded px-1 py-px text-[10px] font-medium normal-case tracking-normal",
-                  tab === t.id ? "bg-accent/20 text-accent" : "bg-surface-raised text-fg-subtle",
+                  "tnum rounded-full px-1.5 text-2xs font-semibold",
+                  tab === t.id ? "bg-accent/15 text-accent" : "bg-surface-raised text-fg-subtle",
                 )}
               >
                 {t.badge}
               </span>
             ) : null}
-            {tab === t.id ? (
-              <span className="absolute -bottom-[7px] left-2 right-2 h-0.5 rounded-full bg-accent" />
-            ) : null}
+
           </button>
         ))}
         <span className="ml-auto flex items-center gap-2 pr-1">
@@ -116,15 +114,15 @@ export function Inspector({
         ) : hasSource ? (
           <div className="flex h-full flex-col">
             {passage ? (
-              <div className="flex h-8 shrink-0 items-center gap-1 border-b border-border bg-bg/40 px-2">
+              <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border bg-surface-raised/50 px-2.5">
                 {(["passage", "page"] as const).map((mode) => (
                   <button
                     key={mode}
                     type="button"
                     onClick={() => setSourceMode(mode)}
                     className={cn(
-                      "h-6 rounded px-2 text-2xs font-medium capitalize transition-colors",
-                      sourceMode === mode ? "bg-accent/20 text-accent" : "text-fg-subtle hover:text-fg",
+                      "h-6.5 rounded-md px-2.5 py-1 text-2xs font-semibold capitalize transition-colors",
+                      sourceMode === mode ? "bg-accent text-accent-fg" : "text-fg-subtle hover:bg-surface hover:text-fg",
                     )}
                   >
                     {mode}

@@ -211,7 +211,7 @@ function describe(item: TraceItem): {
         body: (
           <div className="mt-1 space-y-1">
             {item.args ? (
-              <pre className="overflow-x-auto rounded border border-border bg-bg px-1.5 py-1 font-mono text-2xs text-fg-muted">
+              <pre className="overflow-x-auto rounded-lg border border-border bg-surface-raised px-1.5 py-1 font-mono text-2xs text-fg-muted">
                 {JSON.stringify(item.args, null, 0).slice(0, 240)}
               </pre>
             ) : null}
@@ -312,7 +312,7 @@ export function ReasoningPanel({
 }) {
   if (!reasoning) return null;
   return (
-    <details className="group mt-2 rounded border border-border bg-bg/50">
+    <details className="group mt-2 rounded-lg border border-border bg-surface-raised/50">
       <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2 py-1.5 text-2xs font-medium text-fg-subtle hover:text-fg-muted">
         <Brain size={11} className={streaming ? "animate-pulse-dot" : undefined} />
         Model reasoning

@@ -81,7 +81,7 @@ export default function LoginPage() {
   return (
     <div className="hero-canvas h-full overflow-y-auto">
       <div className="mx-auto flex min-h-full w-full max-w-6xl flex-col justify-center px-6 py-10">
-        <div className="grid items-center gap-10 lg:grid-cols-[1.15fr_1fr]">
+        <div className="grid items-center gap-12 lg:grid-cols-[1.1fr_1fr]">
           {/* --- the claim --- */}
           <div className="stagger">
             <p className="mb-5 flex flex-wrap items-center gap-2 text-2xs font-semibold uppercase tracking-[0.18em] text-fg-subtle">
@@ -95,10 +95,10 @@ export default function LoginPage() {
               <span>Team AIDUO</span>
             </p>
 
-            <h1 className="text-4xl font-semibold leading-[1.05] tracking-tight sm:text-5xl">
+            <h1 className="text-4xl font-semibold leading-[1.08] tracking-tight sm:text-[2.75rem]">
               <span className="wordmark">Sovereign</span> AI Workbench
             </h1>
-            <p className="mt-4 max-w-lg text-base leading-relaxed text-fg-muted">
+            <p className="mt-5 max-w-lg text-lg leading-relaxed text-fg-muted">
               An agent that plans, reads the plant&apos;s own documents, runs the numbers, and hands
               back an answer with the exact passage behind every claim — without a single byte
               leaving the refinery.
@@ -107,7 +107,7 @@ export default function LoginPage() {
               Built for Mangalore Refinery and Petrochemicals Limited · Crude Distillation Unit
             </p>
 
-            <div className="mt-8 rounded-xl border border-border bg-surface/50 p-4 backdrop-blur-sm">
+            <div className="mt-9 rounded-xl border border-border bg-surface p-5 shadow-card">
               <p className="mb-4 text-2xs font-semibold uppercase tracking-wider text-fg-subtle">
                 How every answer is built
               </p>
@@ -118,7 +118,7 @@ export default function LoginPage() {
               {PROOFS.map((proof) => {
                 const Icon = proof.icon;
                 return (
-                  <li key={proof.title} className="rounded-lg border border-border bg-surface/40 p-3">
+                  <li key={proof.title} className="rounded-xl border border-border bg-surface p-4 shadow-xs">
                     <Icon size={15} className="text-accent" />
                     <p className="mt-2 text-xs font-semibold text-fg">{proof.title}</p>
                     <p className="mt-1 text-[11px] leading-relaxed text-fg-subtle">{proof.body}</p>
@@ -129,9 +129,9 @@ export default function LoginPage() {
           </div>
 
           {/* --- the door --- */}
-          <div className="animate-fade-in-up rounded-2xl border border-border bg-surface/80 p-5 shadow-card backdrop-blur-sm">
+          <div className="animate-fade-in-up rounded-2xl border border-border bg-surface p-6 shadow-lifted">
             <div className="mb-4">
-              <h2 className="text-sm font-semibold">Sign in</h2>
+              <h2 className="text-lg font-semibold tracking-tight">Sign in</h2>
               <p className="mt-0.5 text-2xs text-fg-subtle">
                 Pick a role to see what it is — and is not — allowed to do.
               </p>
@@ -145,7 +145,7 @@ export default function LoginPage() {
                     onClick={() => setUsername(account.username)}
                     data-selected={username === account.username}
                     className={cn(
-                      "role-card flex w-full items-center gap-3 py-2 pl-3.5 pr-2.5 hover:border-border-strong",
+                      "role-card flex w-full items-center gap-3 py-2.5 pl-4 pr-3 hover:border-border-strong",
                       CLEARANCE_TONE[account.clearance],
                     )}
                   >
@@ -195,7 +195,7 @@ export default function LoginPage() {
                 </p>
               ) : null}
 
-              <Button type="submit" variant="primary" className="h-9 w-full text-sm" disabled={busy}>
+              <Button type="submit" variant="primary" size="lg" className="w-full" disabled={busy}>
                 {busy ? "Signing in…" : `Enter as ${selected?.label ?? username}`}
                 {!busy ? <ArrowRight size={14} /> : null}
               </Button>

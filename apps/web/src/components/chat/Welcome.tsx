@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Calculator, FileText, HelpCircle, Search, type LucideIcon } from "lucide-react";
 
 import { PipelineStrip } from "@/components/shell/PipelineStrip";
-import { ClassificationBadge } from "@/components/ui/primitives";
+import { ClassificationBadge, StatTile } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
 import type { Classification } from "@/lib/types";
 import { useSession } from "@/stores/session";
@@ -59,28 +59,26 @@ export function Welcome({ onPick }: { onPick: (q: string) => void }) {
   return (
     <div className="animate-fade-in-up mt-6">
       <p className="text-2xs font-semibold uppercase tracking-[0.18em] text-fg-subtle">{greeting()}</p>
-      <h2 className="mt-1 text-2xl font-semibold tracking-tight">
+      <h2 className="mt-1.5 text-3xl font-semibold tracking-tight">
         {name ? `${name}, ask` : "Ask"} the plant&apos;s documents.
       </h2>
-      <p className="mt-2 max-w-xl text-sm leading-relaxed text-fg-muted">
+      <p className="mt-3 max-w-xl text-md leading-relaxed text-fg-muted">
         Every answer comes with a map of what was read and a citation on each claim. When the
         corpus does not cover something, it says so instead of guessing.
       </p>
 
-      <div className="stagger mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Stat value={documents.isLoading ? "…" : String(docs.length)} label="documents you can see" />
-        <Stat value={documents.isLoading ? "…" : passages.toLocaleString()} label="indexed passages" />
-        <Stat value={resident == null ? "…" : String(resident)} label="models resident" />
+      <div className="stagger mt-6 grid grid-cols-[repeat(auto-fit,minmax(8.5rem,1fr))] gap-3">
+        <StatTile value={documents.isLoading ? "…" : String(docs.length)} label="Documents you can see" />
+        <StatTile value={documents.isLoading ? "…" : passages.toLocaleString()} label="Indexed passages" />
+        <StatTile value={resident == null ? "…" : String(resident)} label="Models resident" />
         <div className="stat-tile flex flex-col justify-between">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-fg-subtle">your clearance</span>
+          <span className="section-label">Your clearance</span>
           <ClassificationBadge level={(principal?.clearance ?? "internal") as Classification} className="mt-1 self-start" />
         </div>
       </div>
 
-      <p className="mb-2 mt-6 text-2xs font-semibold uppercase tracking-wider text-fg-subtle">
-        Try one
-      </p>
-      <div className="stagger grid gap-2 sm:grid-cols-2">
+      <p className="section-label mb-2.5 mt-7">Try one</p>
+      <div className="stagger grid grid-cols-[repeat(auto-fit,minmax(17rem,1fr))] gap-3">
         {SUGGESTIONS.map((s) => {
           const Icon = s.icon;
           return (
@@ -88,35 +86,26 @@ export function Welcome({ onPick }: { onPick: (q: string) => void }) {
               key={s.q}
               type="button"
               onClick={() => onPick(s.q)}
-              className="group flex gap-3 rounded-xl border border-border bg-surface/60 p-3.5 text-left transition-all hover:-translate-y-px hover:border-accent/50 hover:bg-surface hover:shadow-glow-sm"
+              className="group flex gap-3 rounded-xl border border-border bg-surface p-4 text-left shadow-xs transition-all duration-150 hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-card"
             >
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-bg text-fg-subtle transition-colors group-hover:border-accent/40 group-hover:text-accent">
-                <Icon size={15} />
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface-raised text-fg-subtle transition-colors group-hover:bg-accent-muted group-hover:text-accent">
+                <Icon size={16} />
               </span>
               <span className="min-w-0">
                 <span className="block text-[10px] font-semibold uppercase tracking-wider text-fg-subtle group-hover:text-accent">
                   {s.why}
                 </span>
-                <span className="mt-0.5 block text-xs leading-snug text-fg group-hover:text-fg">{s.q}</span>
-                <span className="mt-1.5 block text-[11px] leading-snug text-fg-subtle">→ {s.shows}</span>
+                <span className="mt-1 block text-sm font-medium leading-snug text-fg">{s.q}</span>
+                <span className="mt-2 block text-xs leading-snug text-fg-subtle">→ {s.shows}</span>
               </span>
             </button>
           );
         })}
       </div>
 
-      <div className="mt-8 rounded-xl border border-border/70 bg-surface/30 px-4 pb-3 pt-4">
+      <div className="mt-8 rounded-xl border border-border bg-surface px-4 pb-4 pt-5 shadow-xs">
         <PipelineStrip compact />
       </div>
-    </div>
-  );
-}
-
-function Stat({ value, label }: { value: string; label: string }) {
-  return (
-    <div className="stat-tile">
-      <p className="tnum text-xl font-semibold leading-none tracking-tight text-fg">{value}</p>
-      <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-wider text-fg-subtle">{label}</p>
     </div>
   );
 }

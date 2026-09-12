@@ -3,39 +3,43 @@
 @tailwind utilities;
 
 /**
- * Dark is the default, not an option.
+ * Light is the resting state.
  *
- * This runs in a refinery control room on long shifts. A light theme is
- * provided for printing and for daylight offices, but the product's resting
- * state is dark because that is where it lives.
+ * This is a tool people sit in front of for a shift, projected in meeting
+ * rooms and printed from. The dark theme is kept and still works — a control
+ * room at night is a real place — but it is a choice, not the default.
  */
 @layer base {
   :root {
-    --bg: 222 20% 9%;
-    --surface: 222 18% 12%;
-    --surface-raised: 222 16% 16%;
-    --border: 222 14% 22%;
-    --border-strong: 222 14% 32%;
-    --fg: 210 20% 92%;
-    --fg-muted: 215 14% 65%;
-    --fg-subtle: 215 12% 48%;
-    --accent: 33 95% 58%;
-    --accent-fg: 24 40% 8%;
-    --accent-muted: 33 60% 22%;
+    --bg: 210 40% 98%;
+    --surface: 0 0% 100%;
+    --surface-raised: 210 40% 96%;
+    --surface-sunken: 214 32% 94%;
+    --border: 214 32% 91%;
+    --border-strong: 214 20% 78%;
+    --fg: 222 47% 11%;
+    --fg-muted: 215 19% 35%;
+    --fg-subtle: 215 16% 52%;
+    --accent: 243 75% 59%;
+    --accent-strong: 245 58% 51%;
+    --accent-fg: 0 0% 100%;
+    --accent-muted: 244 100% 97%;
   }
 
-  :root[data-theme="light"] {
-    --bg: 210 20% 97%;
-    --surface: 0 0% 100%;
-    --surface-raised: 210 20% 99%;
-    --border: 215 16% 87%;
-    --border-strong: 215 16% 74%;
-    --fg: 222 25% 14%;
-    --fg-muted: 215 14% 40%;
-    --fg-subtle: 215 12% 52%;
-    --accent: 28 90% 46%;
-    --accent-fg: 0 0% 100%;
-    --accent-muted: 33 80% 90%;
+  :root[data-theme="dark"] {
+    --bg: 222 30% 7%;
+    --surface: 222 26% 10%;
+    --surface-raised: 222 22% 14%;
+    --surface-sunken: 222 30% 5%;
+    --border: 222 20% 18%;
+    --border-strong: 222 16% 30%;
+    --fg: 210 30% 95%;
+    --fg-muted: 215 18% 70%;
+    --fg-subtle: 215 15% 55%;
+    --accent: 243 85% 71%;
+    --accent-strong: 243 85% 78%;
+    --accent-fg: 245 60% 12%;
+    --accent-muted: 243 40% 20%;
   }
 
   * {
@@ -50,6 +54,8 @@
   body {
     @apply bg-bg text-fg antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "tnum";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 
   /* Tabular figures everywhere numbers are compared down a column — thickness
@@ -59,7 +65,7 @@
   }
 
   ::selection {
-    @apply bg-accent/30;
+    @apply bg-accent/20 text-fg;
   }
 
   /* A thin, unobtrusive scrollbar: the trace panel and document list are both
@@ -69,31 +75,56 @@
     scrollbar-color: hsl(var(--border-strong)) transparent;
   }
   *::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 10px;
+    height: 10px;
   }
   *::-webkit-scrollbar-track {
     background: transparent;
   }
   *::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border-strong) / 0.7);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
     background-color: hsl(var(--border-strong));
-    border-radius: 4px;
   }
 
   :focus-visible {
-    @apply outline-none ring-2 ring-accent/70 ring-offset-1 ring-offset-bg;
+    @apply outline-none ring-2 ring-accent/60 ring-offset-2 ring-offset-bg;
   }
 }
 
 @layer components {
-  /* The panel is the fundamental unit of this UI — an instrument on a rack. */
-  .panel {
-    @apply rounded-md border border-border bg-surface;
+  /* The card is the fundamental unit of this UI. White, softly lifted off the
+     ground, generous inside. Not a div with a line around it. */
+  .card {
+    @apply rounded-xl border border-border bg-surface shadow-card;
   }
 
+  .card-flat {
+    @apply rounded-xl border border-border bg-surface;
+  }
+
+  .card-header {
+    @apply flex min-h-[3rem] items-center justify-between gap-3 border-b border-border px-4 py-2.5;
+  }
+
+  .card-title {
+    @apply text-sm font-semibold tracking-tight text-fg;
+  }
+
+  /* Kept as an alias so existing markup keeps working while the sweep lands. */
+  .panel {
+    @apply card;
+  }
   .panel-header {
-    @apply flex h-9 items-center justify-between gap-2 border-b border-border px-3
-           text-2xs font-semibold uppercase tracking-wider text-fg-subtle;
+    @apply card-header text-xs font-semibold uppercase tracking-wider text-fg-subtle;
+  }
+
+  .section-label {
+    @apply text-2xs font-semibold uppercase tracking-[0.08em] text-fg-subtle;
   }
 
   .tag {
@@ -103,7 +134,7 @@
   /* Markdown produced by the model. Constrained deliberately: the answer sits
      in a dense layout and unbounded heading sizes would wreck it. */
   .prose-answer {
-    @apply text-[0.9375rem] leading-[1.65] text-fg;
+    @apply text-md leading-[1.7] text-fg;
   }
   .prose-answer > * + * {
     @apply mt-3;
@@ -111,11 +142,11 @@
   .prose-answer h1,
   .prose-answer h2,
   .prose-answer h3 {
-    @apply mt-4 text-sm font-semibold uppercase tracking-wide text-fg-muted;
+    @apply mt-5 text-sm font-semibold uppercase tracking-wider text-fg-muted;
   }
   .prose-answer ul,
   .prose-answer ol {
-    @apply ml-4 space-y-1;
+    @apply ml-5 space-y-1.5;
   }
   .prose-answer ul {
     @apply list-disc;
@@ -124,32 +155,32 @@
     @apply list-decimal;
   }
   .prose-answer code {
-    @apply rounded bg-surface-raised px-1 py-0.5 font-mono text-xs;
+    @apply rounded-md border border-border bg-surface-raised px-1.5 py-0.5 font-mono text-xs;
   }
   .prose-answer pre {
-    @apply overflow-x-auto rounded border border-border bg-surface-raised p-3;
+    @apply overflow-x-auto rounded-lg border border-border bg-surface-raised p-3.5;
   }
   .prose-answer pre code {
-    @apply bg-transparent p-0;
+    @apply border-0 bg-transparent p-0;
   }
   .prose-answer table {
-    @apply w-full border-collapse text-xs;
+    @apply my-3 w-full border-collapse overflow-hidden rounded-lg text-sm;
   }
   .prose-answer th,
   .prose-answer td {
-    @apply border border-border px-2 py-1 text-left;
+    @apply border-b border-border px-3 py-2 text-left;
   }
   .prose-answer th {
-    @apply bg-surface-raised font-semibold;
-  }
-  .prose-answer table {
-    @apply my-2 overflow-hidden rounded-md;
-  }
-  .prose-answer tbody tr:nth-child(even) {
-    @apply bg-surface/60;
+    @apply bg-surface-raised text-2xs font-semibold uppercase tracking-wider text-fg-subtle;
   }
   .prose-answer td {
     @apply tnum;
+  }
+  .prose-answer tbody tr:last-child td {
+    @apply border-b-0;
+  }
+  .prose-answer tbody tr:hover {
+    @apply bg-surface-raised/60;
   }
   .prose-answer strong {
     @apply font-semibold text-fg;
@@ -159,14 +190,13 @@
   }
 }
 
-
 @layer components {
   /* The evidence map's canvas: a faint dot grid gives the graph a floor to sit
      on without competing with it. */
   .evidence-canvas {
-    background-color: hsl(var(--bg));
-    background-image: radial-gradient(hsl(var(--border-strong) / 0.35) 0.8px, transparent 0.8px);
-    background-size: 18px 18px;
+    background-color: hsl(var(--surface-sunken));
+    background-image: radial-gradient(hsl(var(--border-strong) / 0.45) 0.9px, transparent 0.9px);
+    background-size: 20px 20px;
   }
 
   .node-pulse {
@@ -190,13 +220,15 @@
     transition: stroke-dashoffset 900ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
-  /* An assistant turn: a card with a hairline top light, the way instruments
-     on a rack catch the room's light. */
+  /* An assistant turn. A real card, because the answer is the product. */
   .turn-card {
-    @apply rounded-xl border border-border bg-surface/70;
-    box-shadow:
-      0 1px 0 hsl(0 0% 100% / 0.03) inset,
-      0 8px 24px -12px hsl(222 40% 2% / 0.8);
+    @apply rounded-xl border border-border bg-surface shadow-card;
+  }
+
+  /* The person's own message. Tinted rather than boxed, so the eye separates
+     question from answer without two competing cards. */
+  .ask-bubble {
+    @apply rounded-2xl rounded-br-md bg-accent px-4 py-2.5 text-md leading-relaxed text-accent-fg shadow-sm;
   }
 
   .citation-card {
@@ -209,7 +241,25 @@
 
   .passage {
     font-family: ui-serif, Georgia, "Times New Roman", serif;
-    font-size: 0.875rem;
+    font-size: 0.9375rem;
+    line-height: 1.65;
+  }
+
+  /* A row in any list that can be opened. One hover treatment everywhere. */
+  .row-link {
+    @apply transition-colors hover:bg-surface-raised;
+  }
+
+  /* Loading placeholder. A shimmer that reserves the right space beats a
+     spinner that reserves none and then shoves the layout. */
+  .skeleton {
+    @apply relative overflow-hidden rounded-md bg-surface-raised;
+  }
+  .skeleton::after {
+    content: "";
+    @apply absolute inset-0 -translate-x-full;
+    background: linear-gradient(90deg, transparent, hsl(var(--surface) / 0.9), transparent);
+    animation: shimmer 1.6s infinite;
   }
 }
 
@@ -219,10 +269,6 @@
      room, not a gradient poster. Both sit under everything and never move. */
   .app-canvas {
     background-color: hsl(var(--bg));
-    background-image:
-      radial-gradient(60rem 28rem at 18% -10%, hsl(var(--accent) / 0.09), transparent 65%),
-      radial-gradient(hsl(var(--border-strong) / 0.28) 0.7px, transparent 0.7px);
-    background-size: 100% 100%, 22px 22px;
   }
 
   /* The sign-in page pushes the same idea further: it is the one screen that
@@ -231,26 +277,17 @@
   .hero-canvas {
     background-color: hsl(var(--bg));
     background-image:
-      radial-gradient(50rem 32rem at 12% 20%, hsl(var(--accent) / 0.16), transparent 60%),
-      radial-gradient(40rem 30rem at 92% 88%, hsl(205 75% 55% / 0.08), transparent 60%),
-      linear-gradient(hsl(var(--border) / 0.35) 1px, transparent 1px),
-      linear-gradient(90deg, hsl(var(--border) / 0.35) 1px, transparent 1px);
-    background-size: 100% 100%, 100% 100%, 44px 44px, 44px 44px;
-    mask-image: none;
+      radial-gradient(46rem 30rem at 8% -6%, hsl(var(--accent) / 0.10), transparent 62%),
+      radial-gradient(38rem 28rem at 96% 104%, hsl(200 98% 39% / 0.07), transparent 62%);
   }
 
   .wordmark {
-    background: linear-gradient(135deg, hsl(var(--accent)) 0%, hsl(45 95% 68%) 55%, hsl(var(--accent)) 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    @apply text-accent;
   }
 
   .brand-mark {
-    background: linear-gradient(145deg, hsl(45 95% 66%), hsl(var(--accent)) 60%, hsl(24 90% 48%));
-    box-shadow:
-      0 0 0 1px hsl(var(--accent) / 0.35),
-      0 6px 16px -6px hsl(var(--accent) / 0.7);
+    background: linear-gradient(145deg, hsl(243 85% 68%), hsl(var(--accent)) 55%, hsl(250 70% 46%));
+    box-shadow: 0 2px 6px -1px hsl(var(--accent) / 0.45);
   }
 
   /* --- the pipeline strip --- */
@@ -305,7 +342,7 @@
   /* A role card on the sign-in page: the clearance colour runs down its left
      edge so the five roles read as a ladder before a single word is read. */
   .role-card {
-    @apply relative overflow-hidden rounded-lg border border-border bg-surface/70 text-left transition-all;
+    @apply relative overflow-hidden rounded-xl border border-border bg-surface text-left shadow-xs transition-all;
   }
   .role-card::before {
     content: "";
@@ -318,13 +355,13 @@
     opacity: 0.7;
   }
   .role-card[data-selected="true"] {
-    @apply border-accent/60 bg-surface;
-    box-shadow: 0 0 0 1px hsl(var(--accent) / 0.35), 0 10px 30px -18px hsl(var(--accent) / 0.6);
+    @apply border-accent/50 bg-accent-muted;
+    box-shadow: 0 0 0 3px hsl(var(--accent) / 0.10);
   }
 
   /* A stat tile: one number, one label, no chrome. */
   .stat-tile {
-    @apply rounded-lg border border-border bg-surface/60 px-3 py-2.5;
+    @apply rounded-xl border border-border bg-surface px-4 py-3.5 shadow-xs;
   }
 
   @media (prefers-reduced-motion: reduce) {

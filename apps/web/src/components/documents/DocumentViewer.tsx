@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, ScanLine, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { Button, Chip, Spinner } from "@/components/ui/primitives";
+import { Button, Chip } from "@/components/ui/primitives";
 import { PageTranscript } from "@/components/documents/PageTranscript";
 import { ApiError, api, fetchPageImage } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -118,7 +118,7 @@ export function DocumentViewer() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-2">
+      <div className="flex h-header shrink-0 items-center gap-2 border-b border-border px-3">
         <p className="min-w-0 flex-1 truncate text-xs font-medium" title={document?.title}>
           {document?.title ?? "Loading…"}
         </p>
@@ -144,7 +144,7 @@ export function DocumentViewer() {
         </button>
       </div>
 
-      <div className="flex min-h-0 flex-1 items-start justify-center overflow-auto bg-bg p-3">
+      <div className="flex min-h-0 flex-1 items-start justify-center overflow-auto bg-surface-sunken p-4">
         {image.status === "none" ? (
           <PageTranscript blocks={blocks?.blocks ?? []} citation={activeCitation} page={page} />
         ) : image.status === "error" ? (
@@ -153,7 +153,7 @@ export function DocumentViewer() {
             {image.message}
           </div>
         ) : (
-        <div className="relative inline-block shadow-lg">
+        <div className="relative inline-block overflow-hidden rounded-lg shadow-lifted">
           {image.status === "ready" ? (
             // A plain <img>, not next/image. The page renders are served by
             // this system's own API and the citation overlay is positioned
@@ -166,12 +166,11 @@ export function DocumentViewer() {
               ref={imageRef}
               src={image.url}
               alt={`Page ${page}`}
-              className="block max-w-full rounded-sm"
+              className="block max-w-full"
             />
           ) : (
-            <div className="flex h-96 w-72 items-center justify-center rounded border border-border bg-surface">
-              <Spinner className="text-fg-subtle" />
-            </div>
+            <div className="skeleton h-96 w-72 rounded-lg">
+              </div>
           )}
 
           {/* Every extracted region, for inspecting what the pipeline saw. */}
@@ -204,7 +203,7 @@ export function DocumentViewer() {
         )}
       </div>
 
-      <div className="flex h-9 shrink-0 items-center gap-2 border-t border-border px-2">
+      <div className="flex h-11 shrink-0 items-center gap-2 border-t border-border px-3">
         <Button
           size="sm"
           variant="ghost"

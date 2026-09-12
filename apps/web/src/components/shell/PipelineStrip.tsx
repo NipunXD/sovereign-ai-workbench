@@ -50,7 +50,7 @@ export function PipelineStrip({
             ) : null}
             <span
               className={cn(
-                "pipeline-node relative z-10 flex items-center justify-center rounded-full border border-border bg-surface text-fg-muted",
+                "pipeline-node relative z-10 flex items-center justify-center rounded-full border border-border bg-surface text-fg-subtle shadow-xs",
                 compact ? "h-8 w-8" : "h-10 w-10",
               )}
               style={{ animationDelay: `${index * 420}ms` }}

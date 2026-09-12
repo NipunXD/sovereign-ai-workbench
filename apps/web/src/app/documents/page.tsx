@@ -1,17 +1,11 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { FileText, ScanLine } from "lucide-react";
+import { FileText, ScanLine, Search as SearchIcon } from "lucide-react";
 import { useState } from "react";
 
 import { DocumentViewer } from "@/components/documents/DocumentViewer";
-import {
-  Chip,
-  ClassificationBadge,
-  EmptyState,
-  Input,
-  Spinner,
-} from "@/components/ui/primitives";
+import { Chip, ClassificationBadge, EmptyState, Input, StatTile } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
 import type { Classification, DocumentSummary } from "@/lib/types";
 import { cn, formatBytes, relativeTime } from "@/lib/utils";
@@ -31,92 +25,109 @@ export default function DocumentsPage() {
   return (
     <div className="flex h-full">
       <section className="flex min-w-0 flex-1 flex-col">
-        <div className="flex h-11 shrink-0 items-center gap-3 border-b border-border bg-surface px-4">
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Filter by title…"
-            className="max-w-xs"
-          />
-          <p className="ml-auto text-2xs text-fg-subtle">
-            {data?.length ?? 0} document{data?.length === 1 ? "" : "s"} visible at{" "}
-            <span className="text-fg-muted">{principal?.clearance}</span> clearance
-          </p>
-        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+          <div className="mx-auto max-w-6xl space-y-5">
+            {data?.length ? <CorpusStrip documents={data} /> : null}
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {data?.length ? <CorpusStrip documents={data} /> : null}
-          {isLoading ? (
-            <div className="flex justify-center py-10">
-              <Spinner className="text-fg-subtle" />
+            <div className="card overflow-hidden">
+              <div className="card-header">
+                <div className="relative max-w-xs flex-1">
+                  <SearchIcon
+                    size={14}
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle"
+                  />
+                  <Input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Filter by title…"
+                    className="pl-8"
+                  />
+                </div>
+                <p className="text-xs text-fg-subtle">
+                  <span className="tnum font-medium text-fg">{data?.length ?? 0}</span> visible at{" "}
+                  <span className="font-medium text-fg-muted">{principal?.clearance}</span> clearance
+                </p>
+              </div>
+
+              {isLoading ? (
+                <div className="space-y-2 p-4">
+                  {[0, 1, 2, 3, 4].map((n) => (
+                    <div key={n} className="skeleton h-11 w-full" />
+                  ))}
+                </div>
+              ) : !data?.length ? (
+                <EmptyState
+                  icon={<FileText size={18} />}
+                  title="No documents"
+                  hint="Run `python scripts/seed_corpus.py` to generate and ingest the sample MRPL corpus."
+                />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-sm">
+                    <thead>
+                      <tr className="border-b border-border bg-surface-raised/60 text-2xs uppercase tracking-wider text-fg-subtle">
+                        <th className="w-full px-4 py-2.5 text-left font-semibold">Document</th>
+                        <th className="px-3 py-2.5 text-left font-semibold">Type</th>
+                        <th className="px-3 py-2.5 text-left font-semibold">Classification</th>
+                        <th className="px-3 py-2.5 text-right font-semibold">Pages</th>
+                        <th className="px-3 py-2.5 text-right font-semibold">Passages</th>
+                        <th className="px-3 py-2.5 text-right font-semibold">Quality</th>
+                        <th className="px-4 py-2.5 text-right font-semibold">Ingested</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.map((doc) => (
+                        <tr
+                          key={doc.id}
+                          onClick={() => openDocument(doc.id, 1)}
+                          className={cn(
+                            "cursor-pointer border-b border-border/70 transition-colors last:border-b-0",
+                            docId === doc.id ? "bg-accent-muted" : "hover:bg-surface-raised",
+                          )}
+                        >
+                          <td className="max-w-[1px] px-4 py-3">
+                            <p className="truncate font-medium text-fg">{doc.title}</p>
+                            {doc.tags.length ? (
+                              <p className="mt-0.5 truncate font-mono text-2xs text-fg-subtle">
+                                {doc.tags.slice(0, 6).join(" · ")}
+                              </p>
+                            ) : null}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3 text-xs text-fg-muted">{doc.doc_type}</td>
+                          <td className="px-3 py-3">
+                            <ClassificationBadge level={doc.classification} />
+                          </td>
+                          <td className="tnum px-3 py-3 text-right text-fg-muted">{doc.page_count}</td>
+                          <td className="tnum px-3 py-3 text-right text-fg-muted">{doc.chunk_count}</td>
+                          <td className="px-3 py-3 text-right">
+                            {doc.mean_confidence < 0.999 ? (
+                              <Chip tone={doc.mean_confidence < 0.85 ? "warn" : "neutral"}>
+                                <ScanLine size={10} /> {(doc.mean_confidence * 100).toFixed(0)}%
+                              </Chip>
+                            ) : (
+                              <span className="text-2xs text-fg-subtle">native</span>
+                            )}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right text-2xs text-fg-subtle">
+                            {relativeTime(doc.created_at)}
+                            <span className="ml-1.5 tnum">{formatBytes(doc.size_bytes)}</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
-          ) : !data?.length ? (
-            <EmptyState
-              icon={<FileText size={20} />}
-              title="No documents"
-              hint="Run `python scripts/seed_corpus.py` to generate and ingest the sample MRPL corpus."
-            />
-          ) : (
-            <table className="w-full table-fixed border-collapse text-xs">
-              <thead className="sticky top-0 bg-surface">
-                <tr className="border-b border-border text-2xs uppercase tracking-wider text-fg-subtle">
-                  <th className="w-[38%] px-4 py-2 text-left font-semibold">Title</th>
-                  <th className="w-[11%] px-2 py-2 text-left font-semibold">Type</th>
-                  <th className="w-[12%] px-2 py-2 text-left font-semibold">Classification</th>
-                  <th className="w-[7%] px-2 py-2 text-right font-semibold">Pages</th>
-                  <th className="w-[8%] px-2 py-2 text-right font-semibold">Chunks</th>
-                  <th className="w-[10%] px-2 py-2 text-right font-semibold">Quality</th>
-                  <th className="w-[15%] px-4 py-2 text-right font-semibold">Ingested</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.map((doc) => (
-                  <tr
-                    key={doc.id}
-                    onClick={() => openDocument(doc.id, 1)}
-                    className={cn(
-                      "cursor-pointer border-b border-border/60 transition-colors hover:bg-surface-raised",
-                      docId === doc.id && "bg-surface-raised",
-                    )}
-                  >
-                    <td className="px-4 py-2">
-                      <p className="truncate font-medium text-fg">{doc.title}</p>
-                      {doc.tags.length ? (
-                        <p className="mt-0.5 truncate font-mono text-2xs text-fg-subtle">
-                          {doc.tags.slice(0, 6).join(" · ")}
-                        </p>
-                      ) : null}
-                    </td>
-                    <td className="truncate px-2 py-2 text-fg-muted">{doc.doc_type}</td>
-                    <td className="px-2 py-2">
-                      <ClassificationBadge level={doc.classification} />
-                    </td>
-                    <td className="tnum px-2 py-2 text-right text-fg-muted">{doc.page_count}</td>
-                    <td className="tnum px-2 py-2 text-right text-fg-muted">{doc.chunk_count}</td>
-                    <td className="px-2 py-2 text-right">
-                      {doc.mean_confidence < 0.999 ? (
-                        <Chip tone={doc.mean_confidence < 0.85 ? "warn" : "neutral"}>
-                          <ScanLine size={9} /> {(doc.mean_confidence * 100).toFixed(0)}%
-                        </Chip>
-                      ) : (
-                        <span className="text-2xs text-fg-subtle">native</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-right text-2xs text-fg-subtle">
-                      {relativeTime(doc.created_at)}
-                      <span className="ml-1.5">{formatBytes(doc.size_bytes)}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          </div>
         </div>
       </section>
 
-      <aside className="flex w-[28rem] shrink-0 flex-col border-l border-border bg-surface 2xl:w-[34rem]">
-        <DocumentViewer />
-      </aside>
+      {docId ? (
+        <aside className="flex w-[26rem] shrink-0 flex-col border-l border-border bg-surface 2xl:w-[32rem]">
+          <DocumentViewer />
+        </aside>
+      ) : null}
     </div>
   );
 }
@@ -150,30 +161,31 @@ function CorpusStrip({ documents }: { documents: DocumentSummary[] }) {
   }));
 
   return (
-    <div className="stagger grid gap-2 border-b border-border px-4 py-3 sm:grid-cols-[repeat(4,minmax(0,1fr))_minmax(14rem,1.4fr)]">
-      <Tile value={String(documents.length)} label="documents" />
-      <Tile value={pages.toLocaleString()} label="pages" />
-      <Tile value={passages.toLocaleString()} label="indexed passages" />
-      <Tile
+    <div className="stagger grid grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-3">
+      <StatTile value={String(documents.length)} label="Documents" icon={<FileText size={13} />} />
+      <StatTile value={pages.toLocaleString()} label="Pages" />
+      <StatTile value={passages.toLocaleString()} label="Indexed passages" />
+      <StatTile
         value={meanOcr == null ? "—" : `${(meanOcr * 100).toFixed(0)}%`}
-        label={scanned.length ? `mean OCR · ${scanned.length} scanned` : "no scanned pages"}
+        label="Mean OCR quality"
+        hint={scanned.length ? `${scanned.length} scanned source${scanned.length === 1 ? "" : "s"}` : "no scanned pages"}
         tone={meanOcr != null && meanOcr < 0.85 ? "warn" : undefined}
       />
-      <div className="stat-tile">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-fg-subtle">by classification</p>
-        <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-bg">
+      <div className="stat-tile col-span-full sm:col-span-2">
+        <p className="section-label">By classification</p>
+        <div className="mt-3 flex h-2 gap-0.5 overflow-hidden rounded-full bg-surface-sunken">
           {counts
             .filter((c) => c.count)
             .map((c) => (
               <span
                 key={c.level}
-                className={cn("h-full", LADDER_BG[c.level])}
+                className={cn("h-full rounded-full", LADDER_BG[c.level])}
                 style={{ width: `${(c.count / documents.length) * 100}%` }}
                 title={`${c.level}: ${c.count}`}
               />
             ))}
         </div>
-        <p className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-fg-subtle">
+        <p className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 text-2xs text-fg-subtle">
           {counts.map((c) => (
             <span key={c.level} className="flex items-center gap-1">
               <span className={cn("h-1.5 w-1.5 rounded-full", LADDER_BG[c.level], !c.count && "opacity-30")} />
@@ -182,17 +194,6 @@ function CorpusStrip({ documents }: { documents: DocumentSummary[] }) {
           ))}
         </p>
       </div>
-    </div>
-  );
-}
-
-function Tile({ value, label, tone }: { value: string; label: string; tone?: "warn" }) {
-  return (
-    <div className="stat-tile">
-      <p className={cn("tnum text-lg font-semibold leading-none tracking-tight", tone === "warn" ? "text-warn" : "text-fg")}>
-        {value}
-      </p>
-      <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-wider text-fg-subtle">{label}</p>
     </div>
   );
 }

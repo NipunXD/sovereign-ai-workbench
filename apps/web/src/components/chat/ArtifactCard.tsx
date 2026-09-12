@@ -33,14 +33,14 @@ export function ArtifactCard({ artifact }: { artifact: GeneratedArtifact }) {
   }
 
   return (
-    <div className="artifact-card animate-fade-in-up mt-3 overflow-hidden rounded-lg border border-border bg-surface">
-      <div className="flex items-center gap-3 px-3 py-2.5">
+    <div className="artifact-card animate-fade-in-up mt-4 overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+      <div className="flex items-center gap-3 p-3.5">
         <KindGlyph kind={artifact.kind} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-fg" title={artifact.filename}>
             {artifact.filename}
           </p>
-          <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-fg-subtle">
+          <p className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-2xs text-fg-subtle">
             <span className="uppercase">{artifact.kind}</span>
             <span className="tnum">{formatBytes(artifact.size_bytes)}</span>
             <span className="tnum">{sources.length} source{sources.length === 1 ? "" : "s"}</span>
@@ -66,7 +66,7 @@ export function ArtifactCard({ artifact }: { artifact: GeneratedArtifact }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-1.5 border-t border-border px-3 py-1.5 text-left text-2xs text-fg-subtle transition-colors hover:bg-surface-raised hover:text-fg-muted"
+        className="flex w-full items-center gap-1.5 border-t border-border px-3.5 py-2 text-left text-2xs font-medium text-fg-subtle transition-colors hover:bg-surface-raised hover:text-fg"
       >
         <ChevronDown size={12} className={cn("transition-transform", open && "rotate-180")} />
         Provenance
@@ -78,7 +78,7 @@ export function ArtifactCard({ artifact }: { artifact: GeneratedArtifact }) {
       </button>
 
       {open ? (
-        <div className="border-t border-border bg-bg/60 px-3 py-2.5 text-2xs">
+        <div className="border-t border-border bg-surface-raised/50 px-3.5 py-3 text-2xs">
           <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
             <Row label="Requested by">{provenance.generated_by ?? "—"}</Row>
             <Row label="Approved by" tone={approved ? "ok" : "warn"}>
@@ -146,24 +146,24 @@ function Row({
 
 export function KindGlyph({ kind, size = "md" }: { kind: string; size?: "md" | "lg" }) {
   const base = cn(
-    "flex shrink-0 items-center justify-center rounded-md border",
-    size === "lg" ? "h-12 w-12" : "h-9 w-9",
+    "flex shrink-0 items-center justify-center rounded-xl",
+    size === "lg" ? "h-12 w-12" : "h-10 w-10",
   );
   const glyph = size === "lg" ? 22 : 16;
   if (kind === "xlsx")
     return (
-      <span className={cn(base, "border-ok/40 bg-ok/10 text-ok")}>
+      <span className={cn(base, "bg-ok/10 text-ok ring-1 ring-inset ring-ok/20")}>
         <FileSpreadsheet size={glyph} />
       </span>
     );
   if (kind === "pptx")
     return (
-      <span className={cn(base, "border-accent/40 bg-accent/10 text-accent")}>
+      <span className={cn(base, "bg-accent-muted text-accent ring-1 ring-inset ring-accent/20")}>
         <Presentation size={glyph} />
       </span>
     );
   return (
-    <span className={cn(base, "border-info/40 bg-info/10 text-info")}>
+    <span className={cn(base, "bg-info/10 text-info ring-1 ring-inset ring-info/20")}>
       <FileText size={glyph} />
     </span>
   );

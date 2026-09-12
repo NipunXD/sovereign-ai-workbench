@@ -65,23 +65,23 @@ export default function ApprovalsPage() {
   const pending = (approvals.data ?? []).filter((a) => a.status === "pending");
 
   return (
-    <div className="h-full overflow-y-auto p-4">
-      <div className="mx-auto max-w-5xl space-y-4">
-        <Panel className={pending.length ? "border-accent/40" : undefined}>
+    <div className="h-full overflow-y-auto p-5">
+      <div className="mx-auto max-w-6xl space-y-5">
+        <Panel className={pending.length ? "ring-1 ring-accent/25" : undefined}>
           <PanelHeader
             title={`Approval queue${pending.length ? ` — ${pending.length} waiting` : ""}`}
             actions={
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0.5 rounded-lg bg-surface-raised p-0.5">
                 {(["pending", "all"] as const).map((value) => (
                   <button
                     key={value}
                     type="button"
                     onClick={() => setStatusFilter(value)}
                     className={cn(
-                      "rounded px-1.5 py-0.5 text-2xs normal-case transition-colors",
+                      "rounded-md px-2 py-1 text-2xs font-semibold capitalize transition-colors",
                       statusFilter === value
-                        ? "bg-accent/20 text-accent"
-                        : "text-fg-subtle hover:text-fg",
+                        ? "bg-accent text-accent-fg shadow-xs"
+                        : "text-fg-subtle hover:bg-surface-raised hover:text-fg",
                     )}
                   >
                     {value}
@@ -136,7 +136,7 @@ export default function ApprovalsPage() {
               hint="Ask the workbench for a report or a workbook and it will appear here once approved."
             />
           ) : (
-            <ul className="stagger grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3">
+            <ul className="stagger grid grid-cols-[repeat(auto-fill,minmax(17rem,1fr))] gap-3 p-4">
               {artifacts.data.map((artifact) => (
                 <ArtifactTile key={artifact.sha256} artifact={artifact} />
               ))}
@@ -167,8 +167,8 @@ function ApprovalRow({
   };
 
   return (
-    <li className="p-3">
-      <div className="mb-2 flex flex-wrap items-center gap-2">
+    <li className="p-4">
+      <div className="mb-2.5 flex flex-wrap items-center gap-2">
         <ToolIcon tool={summary.tool ?? approval.subject_id} />
         <span className="font-mono text-xs text-fg">{summary.tool ?? approval.subject_id}</span>
         <Chip tone={approval.kind === "tool" ? "accent" : "neutral"}>{approval.kind}</Chip>
@@ -179,7 +179,7 @@ function ApprovalRow({
       </div>
 
       {summary.question ? (
-        <p className="mb-2 rounded border border-border bg-bg px-2 py-1.5 text-xs text-fg-muted">
+        <p className="mb-2.5 rounded-lg border border-border bg-surface-raised px-3 py-2 text-xs italic text-fg-muted">
           “{summary.question}”
         </p>
       ) : null}
@@ -198,7 +198,7 @@ function ApprovalRow({
               value={comment}
               onChange={(event) => setComment(event.target.value)}
               placeholder="Note for the record (optional)"
-              className="h-7 min-w-0 flex-1 rounded border border-border bg-bg px-2 text-xs placeholder:text-fg-subtle focus:border-accent/60"
+              className="h-8 min-w-0 flex-1 rounded-lg border border-border bg-surface px-2.5 text-xs shadow-xs placeholder:text-fg-subtle focus:border-accent/60 focus:outline-none focus:ring-4 focus:ring-accent/10"
             />
             <Button
               size="sm"
@@ -231,7 +231,7 @@ function ArtifactTile({ artifact }: { artifact: Artifact }) {
   const approved = Boolean(provenance.approved_by);
 
   return (
-    <li className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface/70 shadow-card transition-colors hover:border-border-strong">
+    <li className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-xs transition-shadow hover:shadow-card">
       <div className="flex items-start gap-3 p-3">
         <KindGlyph kind={artifact.kind} size="lg" />
         <div className="min-w-0 flex-1">
@@ -257,11 +257,11 @@ function ArtifactTile({ artifact }: { artifact: Artifact }) {
         </div>
       </div>
 
-      <div className="mt-auto flex items-center gap-1 border-t border-border px-2 py-1.5">
+      <div className="mt-auto flex items-center gap-1 border-t border-border px-2.5 py-2">
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}
-          className="rounded px-1.5 py-1 text-2xs text-fg-subtle hover:bg-surface-raised hover:text-fg"
+          className="rounded-md px-2 py-1 text-2xs font-medium text-fg-subtle transition-colors hover:bg-surface-raised hover:text-fg"
         >
           {open ? "Hide provenance" : "Provenance"}
         </button>
@@ -285,7 +285,7 @@ function ArtifactTile({ artifact }: { artifact: Artifact }) {
       </div>
 
       {open ? (
-        <div className="space-y-2 border-t border-border bg-bg/60 p-3 text-2xs">
+        <div className="space-y-2.5 border-t border-border bg-surface-raised/50 p-3.5 text-2xs">
           <div className="grid gap-y-1">
             <Field label="Requested by" value={provenance.generated_by ?? "—"} />
             <Field

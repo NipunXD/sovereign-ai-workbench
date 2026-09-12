@@ -75,7 +75,7 @@ export function ChatWorkspace() {
     <div className="flex h-full">
       <section className="flex min-w-0 flex-1 flex-col">
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-3xl px-5 py-6">
+          <div className="mx-auto max-w-3xl px-5 py-7">
             {!messages.length ? (
               <Welcome
                 onPick={(q) => {
@@ -84,13 +84,11 @@ export function ChatWorkspace() {
                 }}
               />
             ) : (
-              <ol className="space-y-6">
+              <ol className="space-y-7">
                 {messages.map((message) =>
                   message.role === "user" ? (
                     <li key={message.id} className="flex justify-end">
-                      <p className="max-w-[85%] rounded-2xl rounded-br-md bg-surface-raised px-3.5 py-2 text-sm leading-relaxed shadow-card">
-                        {message.text}
-                      </p>
+                      <p className="ask-bubble max-w-[85%]">{message.text}</p>
                     </li>
                   ) : (
                     <li key={message.id}>
@@ -103,11 +101,12 @@ export function ChatWorkspace() {
           </div>
         </div>
 
-        <form onSubmit={submit} className="shrink-0 border-t border-border bg-surface/80 px-5 py-3 backdrop-blur">
+        <form onSubmit={submit} className="shrink-0 border-t border-border bg-surface px-5 py-4">
           <div
             className={cn(
-              "mx-auto flex max-w-3xl items-end gap-2 rounded-xl border bg-bg px-3 py-2 transition-shadow",
-              "border-border focus-within:border-accent/50 focus-within:shadow-glow-sm",
+              "mx-auto flex max-w-3xl items-end gap-2 rounded-xl border bg-surface px-3.5 py-2.5",
+              "shadow-card transition-[border-color,box-shadow] duration-150",
+              "border-border focus-within:border-accent/50 focus-within:shadow-glow",
             )}
           >
             <textarea
@@ -119,13 +118,13 @@ export function ChatWorkspace() {
               }}
               rows={1}
               placeholder="Ask about an SOP, an inspection reading, a drawing — or ask for a report   ( / to focus )"
-              className="max-h-40 min-h-[1.75rem] flex-1 resize-none bg-transparent py-1 text-sm placeholder:text-fg-subtle focus:outline-none"
+              className="max-h-40 min-h-[1.75rem] flex-1 resize-none bg-transparent py-1 text-md leading-relaxed placeholder:text-fg-subtle focus:outline-none"
             />
             {running ? (
               <button
                 type="button"
                 onClick={cancel}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-danger/40 bg-danger/15 text-danger hover:bg-danger/25"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-danger/30 bg-danger/10 text-danger transition-colors hover:bg-danger/20"
                 title="Stop this run"
               >
                 <Square size={13} />
@@ -134,14 +133,14 @@ export function ChatWorkspace() {
               <button
                 type="submit"
                 disabled={!input.trim()}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-fg transition-colors hover:bg-accent/90 disabled:opacity-30"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-fg shadow-xs transition-colors hover:bg-accent-strong disabled:opacity-30"
                 title="Send (Enter)"
               >
                 <ArrowUp size={14} />
               </button>
             )}
           </div>
-          <p className="mx-auto mt-1.5 max-w-3xl text-[10px] text-fg-subtle">
+          <p className="mx-auto mt-2 max-w-3xl text-2xs text-fg-subtle">
             Every answer is grounded in documents you are cleared to see. Nothing leaves this machine.
           </p>
         </form>
@@ -167,14 +166,16 @@ function AssistantTurn({
   const showSpinner = message.status === "streaming" && !message.text;
 
   return (
-    <div className="turn-card animate-fade-in-up px-4 py-3.5">
+    <div className="turn-card animate-fade-in-up px-5 py-4">
       <div className="mb-2.5 flex items-center gap-2 text-2xs text-fg-subtle">
-        <span className="flex h-5 w-5 items-center justify-center rounded bg-accent text-[9px] font-bold text-accent-fg" aria-hidden>
+        <span className="brand-mark flex h-6 w-6 items-center justify-center rounded-md text-[9px] font-bold text-white" aria-hidden>
           MW
         </span>
-        <span className="font-medium text-fg-muted">Workbench</span>
+        <span className="text-xs font-semibold text-fg">Workbench</span>
         {model && model.kind === "route" ? (
-          <span className="rounded border border-border bg-bg px-1.5 py-px font-mono">{model.data.physical_model || model.data.model}</span>
+          <span className="rounded-full bg-surface-raised px-2 py-0.5 font-mono text-2xs text-fg-muted ring-1 ring-inset ring-border">
+            {model.data.physical_model || model.data.model}
+          </span>
         ) : null}
         <span className="tnum ml-auto">{running ? `${formatDuration(elapsed)} · live` : message.summary ? formatDuration(message.summary.wall_ms) : null}</span>
       </div>

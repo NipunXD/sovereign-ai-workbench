@@ -86,10 +86,10 @@ export default function AuditPage() {
   if (error instanceof ApiError && error.status === 403) {
     return (
       <div className="flex h-full items-center justify-center p-6">
-        <div className="max-w-md rounded-xl border border-border bg-surface/70 p-6 text-center shadow-card">
-          <Ban size={22} className="mx-auto text-fg-subtle" />
-          <p className="mt-3 text-sm font-semibold">The audit log is not yours to read</p>
-          <p className="mt-1.5 text-xs leading-relaxed text-fg-muted">
+        <div className="max-w-md rounded-xl border border-border bg-surface p-8 text-center shadow-card">
+          <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-surface-raised text-fg-subtle"><Ban size={20} /></span>
+          <p className="mt-4 text-md font-semibold">The audit log is not yours to read</p>
+          <p className="mt-2 text-xs leading-relaxed text-fg-muted">
             Reading it needs the <span className="font-mono">audit:read</span> permission, which
             the demo grants to Internal Audit and nobody else — the people who act are not the
             people who review. This refusal was itself recorded.
@@ -100,15 +100,15 @@ export default function AuditPage() {
   }
 
   return (
-    <div className="h-full overflow-y-auto p-4">
-      <div className="mx-auto max-w-6xl space-y-4">
+    <div className="h-full overflow-y-auto p-5">
+      <div className="mx-auto max-w-6xl space-y-5">
         {/* --- chain integrity --- */}
         <Panel
           className={cn(
             verify.data && !verify.data.valid ? "border-danger/50" : undefined,
           )}
         >
-          <div className="flex flex-wrap items-center gap-3 p-3">
+          <div className="flex flex-wrap items-center gap-3 p-4">
             <div className="flex items-center gap-2">
               {verify.data ? (
                 verify.data.valid ? (

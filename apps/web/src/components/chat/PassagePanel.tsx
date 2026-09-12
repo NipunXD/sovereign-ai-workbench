@@ -72,10 +72,10 @@ export function PassagePanel({ passage }: { passage: SelectedPassage }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="shrink-0 border-b border-border px-3 py-2.5">
+      <div className="shrink-0 border-b border-border px-4 py-3">
         <div className="flex items-start gap-2">
           {passage.n != null ? (
-            <span className="mt-0.5 flex h-5 min-w-5 items-center justify-center rounded bg-accent px-1.5 font-mono text-2xs font-bold text-accent-fg">
+            <span className="mt-0.5 flex h-5 min-w-5 items-center justify-center rounded-md bg-accent px-1.5 font-mono text-2xs font-bold text-accent-fg">
               {passage.n}
             </span>
           ) : (
@@ -122,7 +122,7 @@ export function PassagePanel({ passage }: { passage: SelectedPassage }) {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         {chunks.isLoading && !chunk ? (
           <div className="flex items-center gap-2 text-2xs text-fg-subtle">
             <Spinner /> loading the full passage…
@@ -135,7 +135,7 @@ export function PassagePanel({ passage }: { passage: SelectedPassage }) {
 
         <blockquote
           className={cn(
-            "passage rounded-md border border-accent/30 bg-accent/[0.04] px-3 py-2.5 text-sm leading-relaxed text-fg",
+            "passage rounded-xl border border-accent/25 bg-accent-muted/60 px-4 py-3.5 text-fg",
             shaky && "border-warn/40",
           )}
         >
@@ -168,7 +168,7 @@ export function PassagePanel({ passage }: { passage: SelectedPassage }) {
 
 function Neighbour({ label, text }: { label: string; text: string }) {
   return (
-    <div className="my-2 rounded-md border border-dashed border-border px-3 py-2 text-xs leading-relaxed text-fg-subtle">
+    <div className="my-2.5 rounded-xl border border-dashed border-border px-4 py-3 text-xs leading-relaxed text-fg-subtle">
       <span className="mb-1 block text-2xs font-semibold uppercase tracking-wider">{label}</span>
       {text}
     </div>
@@ -195,7 +195,7 @@ function highlightSpan(text: string, snippet: string): React.ReactNode {
   return (
     <>
       {haystack.slice(0, start)}
-      <mark className="rounded-sm bg-highlight/25 px-0.5 text-fg">{haystack.slice(start, end)}</mark>
+      <mark className="rounded bg-highlight/40 px-0.5 text-fg">{haystack.slice(start, end)}</mark>
       {haystack.slice(end)}
     </>
   );

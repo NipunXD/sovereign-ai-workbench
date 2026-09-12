@@ -145,8 +145,8 @@ export default function UploadPage() {
   );
 
   return (
-    <div className="h-full overflow-y-auto p-4">
-      <div className="mx-auto max-w-4xl space-y-4">
+    <div className="h-full overflow-y-auto p-5">
+      <div className="mx-auto max-w-4xl space-y-5">
         <Panel>
           <PanelHeader title="Ingest documents" />
           <div className="space-y-3 p-3">
