@@ -7,7 +7,7 @@
 # =============================================================================
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
-.PHONY: help bootstrap deps models infra infra-down dev dev-api dev-worker dev-web \
+.PHONY: help bootstrap deps models infra infra-down dev dev-api dev-web \
         db-upgrade db-revision db-reset seed seed-corpus test test-unit test-integration \
         test-docker lint fmt types boundaries check types-gen eval demo sandbox-image \
         airgap clean nuke
@@ -53,9 +53,6 @@ dev: infra ## Run the whole stack (Ctrl-C stops everything)
 
 dev-api: ## API only, with reload
 	cd $(API_DIR) && $(UV) run uvicorn workbench.main:app --reload --port 8000
-
-dev-worker: ## Background worker only
-	$(UV) run arq workbench.workers.worker.WorkerSettings
 
 dev-web: ## Frontend only
 	cd $(WEB_DIR) && $(PNPM) dev
