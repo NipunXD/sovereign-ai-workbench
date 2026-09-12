@@ -35,7 +35,7 @@ export function SystemStatus() {
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="flex h-6 items-center gap-1.5 rounded border border-border bg-surface-raised px-2 text-2xs font-medium text-fg-muted transition-colors hover:border-border-strong"
+        className="flex h-7 items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 text-2xs font-medium text-fg-muted shadow-xs transition-colors hover:border-border-strong"
         title="System status"
       >
         <StatusDot state={healthy ? "ok" : "warn"} pulse={!healthy} />
@@ -49,7 +49,7 @@ export function SystemStatus() {
       </button>
 
       {open ? (
-        <div className="absolute right-0 top-7 z-50 w-72 animate-slide-up rounded-md border border-border bg-surface-raised p-3 shadow-xl">
+        <div className="absolute right-0 top-9 z-50 w-72 animate-slide-up rounded-xl border border-border bg-surface p-3.5 shadow-popover">
           <p className="mb-2 text-2xs font-semibold uppercase tracking-wider text-fg-subtle">
             Backends
           </p>
@@ -90,7 +90,7 @@ export function SystemStatus() {
                   {residency.resident_gb.toFixed(1)} / {residency.max_resident_gb.toFixed(1)} GB
                 </span>
               </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-bg">
+              <div className="h-1.5 overflow-hidden rounded-full bg-surface-sunken">
                 <div
                   className={cn(
                     "h-full rounded-full transition-all",

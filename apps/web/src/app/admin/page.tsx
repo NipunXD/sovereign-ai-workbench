@@ -118,7 +118,7 @@ export default function AdminPage() {
                   }
                 />
                 <div className="p-3">
-                  <div className="h-2 overflow-hidden rounded-full bg-bg">
+                  <div className="h-2 overflow-hidden rounded-full bg-surface-sunken">
                     <div
                       className={cn(
                         "h-full rounded-full transition-all",
@@ -186,7 +186,7 @@ export default function AdminPage() {
                               ? "1 · lexical"
                               : "2 · classifier"}
                         </span>
-                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-bg">
+                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-sunken">
                           <div
                             className="h-full rounded-full bg-accent"
                             style={{
@@ -214,7 +214,7 @@ export default function AdminPage() {
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded border border-border bg-bg px-2 py-1.5">
+    <div className="rounded-lg border border-border bg-surface-raised px-2.5 py-2">
       <p className="text-2xs uppercase tracking-wider text-fg-subtle">{label}</p>
       <p className="tnum mt-0.5 text-sm font-semibold text-fg">{value}</p>
     </div>

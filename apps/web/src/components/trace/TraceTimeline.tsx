@@ -232,7 +232,7 @@ function describe(item: TraceItem): {
         body: v.is_refusal ? null : (
           <div className="mt-1 space-y-1">
             <div className="flex items-center gap-1.5">
-              <div className="h-1 w-20 overflow-hidden rounded-full bg-bg">
+              <div className="h-1.5 w-20 overflow-hidden rounded-full bg-surface-sunken">
                 <div
                   className={cn("h-full rounded-full", good ? "bg-ok" : "bg-warn")}
                   style={{ width: `${grounded}%` }}

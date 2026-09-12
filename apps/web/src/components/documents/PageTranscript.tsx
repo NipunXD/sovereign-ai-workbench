@@ -31,7 +31,7 @@ export function PageTranscript({
 
   return (
     <div className="mx-auto w-full max-w-2xl">
-      <p className="mb-3 flex items-start gap-2 rounded-lg border border-border bg-surface/60 px-3 py-2 text-2xs leading-relaxed text-fg-subtle">
+      <p className="mb-4 flex items-start gap-2.5 rounded-xl border border-info/20 bg-info/5 px-3.5 py-2.5 text-2xs leading-relaxed text-fg-muted">
         <FileSpreadsheet size={13} className="mt-px shrink-0 text-info" />
         <span>
           {office
@@ -41,7 +41,7 @@ export function PageTranscript({
         </span>
       </p>
 
-      <div className="space-y-3 rounded-lg border border-border bg-surface p-3.5">
+      <div className="space-y-3.5 rounded-xl border border-border bg-surface p-4 shadow-xs">
         {blocks.map((block) => (
           <Block key={block.block_id} block={block} probe={probe} />
         ))}
@@ -83,7 +83,7 @@ function Block({ block, probe }: { block: DocumentBlock; probe: string | null })
           </thead>
           <tbody>
             {body.map((row, rowIndex) => (
-              <tr key={rowIndex} className="even:bg-bg/40">
+              <tr key={rowIndex} className="even:bg-surface-raised/50">
                 {row.map((cell, index) => (
                   <td key={index} className="tnum border-b border-border/50 px-2 py-1 text-fg-muted">
                     {cell}

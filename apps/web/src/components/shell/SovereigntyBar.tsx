@@ -32,7 +32,7 @@ export function SovereigntyBar() {
         type="button"
         onClick={() => setOpen((value) => !value)}
         className={cn(
-          "flex h-6 items-center gap-1.5 rounded border px-2 text-2xs font-semibold uppercase tracking-wider transition-colors",
+          "flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-2xs font-semibold uppercase tracking-wider shadow-xs transition-colors",
           sovereign
             ? "border-ok/40 bg-ok/10 text-ok hover:bg-ok/20"
             : "border-danger/40 bg-danger/10 text-danger hover:bg-danger/20",
@@ -44,7 +44,7 @@ export function SovereigntyBar() {
       </button>
 
       {open && report ? (
-        <div className="absolute right-0 top-7 z-50 w-80 animate-slide-up rounded-md border border-border bg-surface-raised p-3 shadow-xl">
+        <div className="absolute right-0 top-9 z-50 w-80 animate-slide-up rounded-xl border border-border bg-surface p-3.5 shadow-popover">
           <p className="mb-2 text-2xs font-semibold uppercase tracking-wider text-fg-subtle">
             Configured destinations
           </p>

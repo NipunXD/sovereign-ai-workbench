@@ -217,7 +217,7 @@ function SessionRow({
               }
             }}
             onBlur={commit}
-            className="h-6 min-w-0 flex-1 rounded border border-accent/50 bg-bg px-1.5 text-2xs focus:outline-none"
+            className="h-7 min-w-0 flex-1 rounded-md border border-accent/60 bg-surface px-2 text-xs focus:outline-none focus:ring-4 focus:ring-accent/10"
           />
           <button type="button" onMouseDown={commit} className="rounded p-0.5 text-ok" title="Save">
             <Check size={12} />
@@ -242,7 +242,7 @@ function SessionRow({
       )}
 
       {!editing ? (
-        <span className="absolute right-1 top-1 hidden items-center gap-0.5 rounded bg-surface/90 p-0.5 group-hover:flex">
+        <span className="absolute right-1.5 top-1.5 hidden items-center gap-0.5 rounded-lg bg-surface p-0.5 shadow-sm ring-1 ring-border group-hover:flex">
           <button
             type="button"
             onClick={() => setEditing(true)}

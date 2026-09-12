@@ -176,7 +176,7 @@ function Idle() {
       <PipelineStrip compact />
       <ul className="mt-6 space-y-2">
         {rows.map((row) => (
-          <li key={row.title} className="flex gap-2.5 rounded-lg border border-border/70 bg-bg/40 px-3 py-2">
+          <li key={row.title} className="flex gap-3 rounded-xl border border-border bg-surface-raised/50 px-3.5 py-2.5">
             <span className="mt-0.5 text-fg-subtle">{row.icon}</span>
             <span>
               <span className="block text-xs font-semibold text-fg-muted">{row.title}</span>
