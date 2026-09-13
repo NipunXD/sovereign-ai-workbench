@@ -280,6 +280,7 @@ export interface ValidationReport {
   schema_errors: string[];
   is_refusal: boolean;
   acceptable: boolean;
+  /** Only on runs recorded before the early stop became its own limitation. */
   budget_exhausted?: boolean;
   reason?: string;
 }

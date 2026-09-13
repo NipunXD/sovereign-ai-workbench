@@ -259,8 +259,13 @@ function describe(item: TraceItem): {
 
     case "validation": {
       const v = item.data;
-      const grounded = Math.round(v.grounded_ratio * 100);
-      const good = v.is_refusal || v.grounded_ratio >= 0.8;
+      // Runs recorded before the early-stop notice got its own event name
+      // carry a validation payload with none of these fields. They are
+      // replayed from the database long after the fact, so the guards stay.
+      const ratio = typeof v.grounded_ratio === "number" ? v.grounded_ratio : 0;
+      const invented = v.unresolved_citations?.length ?? 0;
+      const grounded = Math.round(ratio * 100);
+      const good = v.is_refusal || ratio >= 0.8;
       return {
         icon: good ? <ShieldCheck size={11} /> : <AlertTriangle size={11} />,
         tone: good ? "border-ok/40 bg-ok/10 text-ok" : "border-warn/40 bg-warn/10 text-warn",
@@ -276,10 +281,9 @@ function describe(item: TraceItem): {
               </div>
               <span className="tnum text-2xs text-fg-muted">{grounded}% cited</span>
             </div>
-            {v.unresolved_citations.length ? (
+            {invented ? (
               <p className="text-2xs text-danger">
-                {v.unresolved_citations.length} invented citation
-                {v.unresolved_citations.length === 1 ? "" : "s"} removed
+                {invented} invented citation{invented === 1 ? "" : "s"} removed
               </p>
             ) : null}
           </div>

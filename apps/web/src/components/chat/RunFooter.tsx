@@ -43,7 +43,13 @@ export function RunFooter({
   const [open, setOpen] = useState(false);
 
   const refusal = validation?.is_refusal ?? false;
-  const grounded = validation ? Math.round(validation.grounded_ratio * 100) : null;
+  // Same guard as the timeline: an older stored run can carry a validation
+  // payload without a ratio, and Math.round(undefined * 100) is NaN, which
+  // rendered as "NaN% grounded" on the answer.
+  const grounded =
+    typeof validation?.grounded_ratio === "number"
+      ? Math.round(validation.grounded_ratio * 100)
+      : null;
   const figures = validation?.figures ?? [];
   const verified = figures.filter((f) => f.found).length;
   // A derived number is in no document by construction. Counting it against

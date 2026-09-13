@@ -529,10 +529,23 @@ class AgentRunner:
                 return
             if budget.exhausted:
                 # Not an error: answer with what is available and say so.
+                #
+                # Sent as a limitation, which is what it is. It used to go out
+                # under the validation name, where it arrived as a second,
+                # differently-shaped thing claiming to be the critic's report —
+                # no grounding ratio, no citation lists — and reading it as one
+                # took the page down with a TypeError.
                 state["scratchpad"].append({"note": f"stopped early — {budget.reason()}"})
                 yield TraceEvent(
-                    EventName.VALIDATION,
-                    {"budget_exhausted": True, "reason": budget.reason()},
+                    EventName.LIMITATION,
+                    {
+                        "code": "budget_exhausted",
+                        "message": (
+                            f"The run stopped before finishing its plan — it "
+                            f"{budget.reason()}. The answer uses what had been "
+                            f"gathered by then."
+                        ),
+                    },
                 )
                 return
 
