@@ -438,6 +438,44 @@ class ModelRouter:
             features_digest=decision.features_digest,
         )
 
+    def note_unreachable(self, logical_name: str) -> list[str]:
+        """Take every model on this model's backend out of routing.
+
+        Called when a provider refuses the connection. The backend is down, not
+        the model, so its siblings are no more reachable than it is — and
+        routing to them in turn is how one dead process became a run that
+        planned on a fallback model and then died anyway at synthesis, having
+        gone back to the backend it had already found missing.
+        """
+        provider = self.registry.get_model(logical_name).provider
+        tripped = [
+            info.logical_name for info in self.registry.models.values() if info.provider == provider
+        ]
+        for name in tripped:
+            self.policy.breaker.trip(name, reason=f"{provider} unreachable")
+        return tripped
+
+    def stand_in_for(self, logical_name: str) -> str | None:
+        """Another model in the same lane, on a backend that is still up.
+
+        None when the lane has nothing left, which the caller reports honestly
+        rather than pretending a different lane's model is the same answer.
+        """
+        failed = self.registry.get_model(logical_name)
+        lane = next(
+            (name for name, members in self.registry.lanes.items() if logical_name in members),
+            None,
+        )
+        if lane is None:
+            return None
+        for info in self.registry.lane_candidates(lane):
+            if info.logical_name == logical_name or info.provider == failed.provider:
+                continue
+            if self.policy.breaker.is_open(info.logical_name):
+                continue
+            return info.logical_name
+        return None
+
     def record_success(self, decision: RouteDecision) -> None:
         self.policy.breaker.record_success(decision.model.logical_name)
 

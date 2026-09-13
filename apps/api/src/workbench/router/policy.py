@@ -84,6 +84,22 @@ class CircuitBreaker:
                 cooldown_s=self.cooldown_s,
             )
 
+    def trip(self, logical_name: str, *, reason: str) -> None:
+        """Open the breaker at once, without waiting for the strike count.
+
+        Three strikes is the right shape for a model that answers badly under
+        load. It is the wrong shape for a backend that is not running: every
+        model it serves will refuse every connection, and counting to three on
+        each of them means the run walks the whole candidate list before it
+        gives up. A refused connection is not a flaky call, it is an absent
+        process.
+        """
+        state = self._state[logical_name]
+        state.failures = max(state.failures, self.failure_threshold)
+        state.opened_at = time.monotonic()
+        state.first_failure_at = state.opened_at
+        log.warning("circuit_breaker_tripped", model=logical_name, reason=reason)
+
     def snapshot(self) -> dict[str, dict[str, object]]:
         return {
             name: {

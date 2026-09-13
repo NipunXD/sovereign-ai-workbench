@@ -31,6 +31,19 @@ import { useInspector } from "@/stores/inspector";
  * chosen and why, what was retrieved, which tools ran, and how the answer
  * scored against its own sources.
  */
+/**
+ * Plain titles for the failures an operator can actually act on.
+ *
+ * The card used to be titled with the Python class name — "ProviderUnavailableError"
+ * — which names the code that raised rather than the machine that is off.
+ */
+const ERROR_TITLES: Record<string, string> = {
+  provider_unavailable: "Model server not reachable",
+  provider_timeout: "Model did not respond in time",
+  model_not_found: "Model not installed",
+  plan_step_dropped: "A planned step was dropped",
+};
+
 export function TraceTimeline({
   trace,
   startedAt,
@@ -328,7 +341,7 @@ function describe(item: TraceItem): {
         tone: item.recoverable
           ? "border-warn/40 bg-warn/10 text-warn"
           : "border-danger/40 bg-danger/10 text-danger",
-        title: item.code.replace(/_/g, " "),
+        title: ERROR_TITLES[item.code] ?? item.code.replace(/_/g, " "),
         body: <p className="mt-0.5 text-2xs text-fg-muted">{item.message}</p>,
       };
 

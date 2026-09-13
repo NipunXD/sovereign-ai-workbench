@@ -43,7 +43,12 @@ from workbench.core.event_names import EventName
 from workbench.core.ids import prefixed_id
 from workbench.core.logging import get_logger
 from workbench.core.prose import plain_maths
-from workbench.providers.errors import ProviderResponseError
+from workbench.providers.errors import (
+    ModelNotFoundError,
+    ProviderResponseError,
+    ProviderTimeoutError,
+    ProviderUnavailableError,
+)
 from workbench.providers.types import ChatMessage, GenerationRequest, ImageRef
 from workbench.rag.citations import EvidenceItem, build_evidence_prompt, resolve_markers
 from workbench.router.router import ModelRouter, RouteRequest
@@ -152,6 +157,37 @@ class Retriever:
         raise NotImplementedError
 
 
+def _failure_message(exc: Exception) -> str:
+    """What to tell the person, for a failure only an operator can fix.
+
+    "ProviderUnavailableError" names a Python class. It does not say that the
+    model server is not running, which is the whole of the problem and a
+    thirty-second fix — and on an air-gapped machine, with no support desk to
+    forward it to, the class name is the end of the road for whoever is
+    standing there.
+    """
+    if isinstance(exc, ProviderUnavailableError):
+        return (
+            "The local model server is not reachable, so this request could not "
+            "run. Start it and ask again — nothing was generated or changed. "
+            f"({exc})"
+        )
+    if isinstance(exc, ProviderTimeoutError):
+        return (
+            "The local model did not respond in time, so this request was "
+            "stopped. Nothing was generated or changed."
+        )
+    if isinstance(exc, ModelNotFoundError):
+        return (
+            "A model this request needs is not installed on the local backend. "
+            "Run 'make models-check' to see which. Nothing was generated or changed."
+        )
+    return (
+        f"I could not complete this request: {type(exc).__name__}. "
+        f"Nothing was generated or changed."
+    )
+
+
 def _with_history(state: AgentState) -> str:
     """The request, preceded by what was said before it in this conversation.
 
@@ -252,13 +288,15 @@ class AgentRunner:
             # A failure must produce an honest message, never a silent stop.
             log.exception("agent_run_failed", run_id=state["run_id"], error=str(exc))
             state["status"] = "failed"
-            state["final"] = (
-                f"I could not complete this request: {type(exc).__name__}. "
-                f"Nothing was generated or changed."
-            )
+            state["final"] = _failure_message(exc)
             yield TraceEvent(
                 EventName.ERROR,
-                {"code": type(exc).__name__, "message": str(exc)[:300], "recoverable": False},
+                {
+                    "code": getattr(exc, "code", None) or type(exc).__name__,
+                    "message": _failure_message(exc),
+                    "detail": str(exc)[:300],
+                    "recoverable": False,
+                },
             )
 
         state.setdefault("final", "")
@@ -296,17 +334,42 @@ class AgentRunner:
         state["route_decisions"].append(decision.to_event())
         yield TraceEvent(EventName.ROUTE_DECISION, {"node": "plan", **decision.to_event()})
 
+        messages = [
+            ChatMessage(role="system", content=f"{PLANNER_PROMPT}\n\nTools:\n{catalogue_text}"),
+            ChatMessage(role="user", content=_with_history(state)),
+        ]
         result = await self._generate(
             decision.model.logical_name,
-            [
-                ChatMessage(role="system", content=f"{PLANNER_PROMPT}\n\nTools:\n{catalogue_text}"),
-                ChatMessage(role="user", content=_with_history(state)),
-            ],
+            messages,
             json_schema=_PLAN_SCHEMA,
             state=state,
         )
 
         plan = self._parse_plan(result.text, state)
+
+        # Unparseable JSON falls back to "retrieve, then answer", which loses
+        # every tool step — the calculation among them. The answer still comes
+        # out, computed in prose, and looks fine. So the planner is asked once
+        # more before accepting that, which costs one call on the rare run
+        # where a smaller stand-in model fumbles the format.
+        if any(problem.get("node") == "plan" for problem in state["errors"]):
+            state["errors"] = [p for p in state["errors"] if p.get("node") != "plan"]
+            retry = await self._generate(
+                decision.model.logical_name,
+                [
+                    *messages,
+                    ChatMessage(
+                        role="user",
+                        content=(
+                            "Your previous reply was not valid JSON. Reply with the "
+                            "JSON object only — no prose, no code fence, no comments."
+                        ),
+                    ),
+                ],
+                json_schema=_PLAN_SCHEMA,
+                state=state,
+            )
+            plan = self._parse_plan(retry.text, state)
         state["plan"] = plan
         yield TraceEvent(EventName.PLAN_CREATED, plan.as_dict())
 
@@ -1414,6 +1477,41 @@ class AgentRunner:
             await self.residency.acquire(logical_name)
         try:
             result = await provider.generate(request)
+        except ProviderUnavailableError as exc:
+            # The backend is not running. Its siblings are no more reachable
+            # than it is, so the whole backend comes out of routing and the
+            # lane is asked for a stand-in on a different one. Without this,
+            # one dead process produced a run that planned on a fallback model
+            # and then died at synthesis by going back to the backend it had
+            # already found missing.
+            stand_in = self.router.stand_in_for(logical_name)
+            self.router.note_unreachable(logical_name)
+            if stand_in is None:
+                raise
+            log.warning(
+                "provider_unreachable_standing_in",
+                model=logical_name,
+                provider=info.provider,
+                stand_in=stand_in,
+                error=str(exc)[:200],
+            )
+            state["limitations"].append(
+                {
+                    "code": "provider_unreachable",
+                    "message": (
+                        f"The {info.provider} model server is not reachable, so this "
+                        f"run used {stand_in} instead of {logical_name}. Answers may "
+                        f"be shorter or less precise than usual."
+                    ),
+                }
+            )
+            return await self._generate(
+                stand_in,
+                messages,
+                json_schema=json_schema,
+                state=state,
+                max_tokens=max_tokens,
+            )
         except ProviderResponseError as exc:
             # LM Studio unloads idle models on its own timer, and residency
             # only hears about it at the next reconciliation. In between, the

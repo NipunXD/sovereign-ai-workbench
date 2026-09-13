@@ -16,8 +16,9 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
-from workbench.agent.runner import AgentRunner
+from workbench.agent.runner import AgentRunner, _failure_message
 from workbench.agent.state import Budget, PlanStep, StepIntent
+from workbench.providers.errors import ModelNotFoundError, ProviderUnavailableError
 from workbench.tools.base import ToolResult
 
 pytestmark = pytest.mark.anyio
@@ -249,3 +250,19 @@ class TestBinding:
         assert error is None
         assert args == {"thickness": "12.50 mm"}
         assert "12.5 mm for 2023" in prompts[0]
+
+
+class TestFailureMessage:
+    """A class name is the end of the road for whoever is standing there."""
+
+    def test_an_unreachable_backend_says_what_to_do(self) -> None:
+        message = _failure_message(ProviderUnavailableError("lmstudio unreachable"))
+        assert "model server is not reachable" in message
+        assert "Start it" in message
+        assert "nothing was generated or changed" in message.lower()
+
+    def test_a_missing_model_names_the_check(self) -> None:
+        assert "make models-check" in _failure_message(ModelNotFoundError("qwen3-8b"))
+
+    def test_anything_else_keeps_the_old_wording(self) -> None:
+        assert "ValueError" in _failure_message(ValueError("boom"))
