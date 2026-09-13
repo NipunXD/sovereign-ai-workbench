@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ClipboardList,
   Database,
+  ShieldAlert,
   FileCheck2,
   Route,
   ShieldCheck,
@@ -197,16 +198,24 @@ function describe(item: TraceItem): {
 
     case "tool": {
       const finished = item.ok !== undefined;
-      const failed = item.ok === false;
+      // A tool that checked its inputs and said no is this system working.
+      // Drawn as a failure it reads as a broken calculator, which is the
+      // opposite of what happened and the opposite of what it is for.
+      const refused = item.ok === false && item.refused === true;
+      const failed = item.ok === false && !refused;
       return {
-        icon: failed ? <XCircle size={11} /> : <Wrench size={11} />,
+        icon: failed ? <XCircle size={11} /> : refused ? <ShieldAlert size={11} /> : <Wrench size={11} />,
         tone: failed
           ? "border-danger/40 bg-danger/10 text-danger"
-          : "border-accent/40 bg-accent/10 text-accent",
+          : refused
+            ? "border-warn/40 bg-warn/10 text-warn"
+            : "border-accent/40 bg-accent/10 text-accent",
         title: finished
           ? failed
             ? `${item.tool} failed`
-            : `${item.tool} completed`
+            : refused
+              ? `${item.tool} declined the inputs`
+              : `${item.tool} completed`
           : `Calling ${item.tool}`,
         body: (
           <div className="mt-1 space-y-1.5">
@@ -217,7 +226,20 @@ function describe(item: TraceItem): {
                 {JSON.stringify(item.args, null, 0).slice(0, 240)}
               </pre>
             ) : null}
-            {item.error ? <p className="text-2xs text-danger">{item.error}</p> : null}
+            {item.error ? (
+              item.refused ? (
+                <div className="rounded-lg border border-warn/30 bg-warn/[0.06] px-2.5 py-2">
+                  <p className="text-2xs font-semibold text-warn">Inputs did not check out</p>
+                  <p className="mt-0.5 text-2xs leading-relaxed text-fg-muted">{item.error}</p>
+                  <p className="mt-1.5 text-2xs text-fg-subtle">
+                    The calculation was not run. Nothing derived from these inputs reached the
+                    answer.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-2xs text-danger">{item.error}</p>
+              )
+            ) : null}
           </div>
         ),
       };

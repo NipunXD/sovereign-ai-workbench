@@ -113,10 +113,28 @@ class ToolResult:
     #: again.
     display: dict[str, Any] | None = None
     error: str | None = None
+    #: Whether the tool declined its inputs rather than breaking on them.
+    #: A dimensional check that catches a bad unit, or a reading the documents
+    #: put in a different year, is this control working — and reporting it the
+    #: same way as a crash teaches a reader that the red line means nothing.
+    refused: bool = False
 
     @classmethod
     def failure(cls, error: str, **metrics: Any) -> ToolResult:
+        """The tool broke: a timeout, an exception, a backend that was gone."""
         return cls(ok=False, error=error, metrics=metrics)
+
+    @classmethod
+    def refuse(cls, reason: str, **metrics: Any) -> ToolResult:
+        """The tool worked and declined the inputs it was given.
+
+        Kept apart from :meth:`failure` because the two need opposite
+        readings. A failure means something is wrong with the system; a
+        refusal means the system caught something wrong with the request,
+        which is the whole reason a calculation goes through a tool instead of
+        a sentence.
+        """
+        return cls(ok=False, error=reason, refused=True, metrics=metrics)
 
     def summary(self) -> dict[str, Any]:
         """A compact form for the trace timeline and the scratchpad.
@@ -133,6 +151,8 @@ class ToolResult:
         }
         if self.display is not None:
             summary["display"] = self.display
+        if self.refused:
+            summary["refused"] = True
         return summary
 
 

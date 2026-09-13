@@ -393,13 +393,13 @@ class EngineeringCalcTool(BaseTool):
         assert isinstance(args, CalcInput)
         handler = getattr(self, f"_{args.calculation}", None)
         if handler is None:
-            return ToolResult.failure(f"unsupported calculation '{args.calculation}'")
+            return ToolResult.refuse(f"unsupported calculation '{args.calculation}'")
 
         cleaned, ignored = normalise_inputs(args.calculation, args.inputs)
         expected = PARAMETERS.get(args.calculation, {})
         missing = [name for name in expected.get("required", []) if name not in cleaned]
         if missing:
-            return ToolResult.failure(
+            return ToolResult.refuse(
                 f"missing required input(s) for {args.calculation}: {', '.join(missing)}. "
                 f"Expected: {', '.join(expected.get('required', []))}"
                 + (
@@ -415,7 +415,7 @@ class EngineeringCalcTool(BaseTool):
                 for key, value in cleaned.items()
             }
         except (pint.UndefinedUnitError, pint.DimensionalityError, TypeError, ValueError) as exc:
-            return ToolResult.failure(f"could not parse the inputs: {exc}")
+            return ToolResult.refuse(f"could not parse the inputs: {exc}")
 
         # Checked against the documents before the arithmetic, not after: a
         # figure that was never in the sources should not reach a result the
@@ -434,24 +434,24 @@ class EngineeringCalcTool(BaseTool):
                     str(year).strip(), quantities[thickness_key], sources, location
                 )
                 if problem:
-                    return ToolResult.failure(problem)
+                    return ToolResult.refuse(problem)
 
         try:
             output = handler(quantities)
         except KeyError as exc:
-            return ToolResult.failure(f"missing required input: {exc}")
+            return ToolResult.refuse(f"missing required input: {exc}")
         except pint.DimensionalityError as exc:
             # The check that earns this tool its place: a wrong unit combination
             # fails loudly instead of producing a plausible wrong number.
-            return ToolResult.failure(f"dimensional error: {exc}")
+            return ToolResult.refuse(f"dimensional error: {exc}")
         except ValueError as exc:
             # Raised by a handler when the inputs contradict each other — a
             # pair of readings whose dates do not match the interval given.
             # The message is written for the reader, so it is passed through
             # rather than prefixed with the exception class.
-            return ToolResult.failure(str(exc))
+            return ToolResult.refuse(str(exc))
         except ZeroDivisionError:
-            return ToolResult.failure("division by zero — check the interval or rate inputs")
+            return ToolResult.refuse("division by zero — check the interval or rate inputs")
         except Exception as exc:
             return ToolResult.failure(f"{type(exc).__name__}: {exc}")
 

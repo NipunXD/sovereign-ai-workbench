@@ -103,6 +103,7 @@ export function applyEvent(
         tool: String(payload.tool ?? ""),
         ok: Boolean(payload.ok),
         error: payload.error ? String(payload.error) : undefined,
+        refused: Boolean(payload.refused),
         metrics: payload.metrics as Record<string, unknown> | undefined,
         display: payload.display as Record<string, unknown> | undefined,
       });

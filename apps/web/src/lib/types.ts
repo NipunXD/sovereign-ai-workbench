@@ -308,6 +308,8 @@ export type TraceItem =
       args?: Record<string, unknown>;
       ok?: boolean;
       error?: string;
+      /** The tool declined its inputs rather than breaking on them. */
+      refused?: boolean;
       metrics?: Record<string, unknown>;
       /** A formatted view of the result, when the tool provides one. */
       display?: CalculationDisplay | Record<string, unknown>;
