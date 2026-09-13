@@ -1105,6 +1105,78 @@ class AgentRunner:
         state["status"] = "succeeded"
         yield TraceEvent(EventName.VALIDATION, report.as_dict())
 
+        # Said after the answer because it can only be known after the answer.
+        for message in self._calculation_overridden(state, resolved.text):
+            state["limitations"].append({"code": "calculation_overridden", "message": message})
+            yield TraceEvent(
+                EventName.LIMITATION, {"code": "calculation_overridden", "message": message}
+            )
+
+    @staticmethod
+    def _calculation_overridden(state: AgentState, answer: str) -> list[str]:
+        """Calculations the answer quietly declined to use.
+
+        Synthesis is the terminal step, so anything a tool produces is produced
+        *before* the answer exists — including a generated document, which is
+        assembled from the tool results. That is fine while the two agree. It
+        stops being fine the moment the model re-reads the sources while
+        writing and decides the tool was working from the wrong inputs.
+
+        Which is exactly what happened on a real run: asked for the 2023 and
+        2029 readings, the model handed the calculator the 2019 and 2023 ones,
+        got a correct 0.2333 mm/year for the numbers it supplied, and the
+        report was compiled from it. Then, writing the answer, it noticed,
+        recomputed 0.55 mm/year from the right pair, and said so on screen. The
+        screen was right. The signed, downloadable document said 0.2333, and
+        nothing in the run mentioned that the two disagreed.
+
+        A wrong number in a document nobody flagged is worse than no document,
+        so the run says it. Which of the two is correct is deliberately left
+        open — the tool did the arithmetic it was given, and whether the inputs
+        were the right ones is a question only a person can settle.
+        """
+        from workbench.agent import numerics
+
+        answer_values: list[float] = []
+        for figure in numerics.extract(answer):
+            try:
+                answer_values.append(float(figure.value))
+            except ValueError:
+                continue
+
+        produced_document = any(
+            (result.get("artifacts") or []) for result in state.get("tool_results") or []
+        )
+
+        messages: list[str] = []
+        for result in state.get("tool_results") or []:
+            display = result.get("display") or {}
+            if display.get("kind") != "calculation" or not result.get("ok"):
+                continue
+            try:
+                computed = float(display["value"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            # Compared with tolerance: an answer that rounds 0.2333 to 0.23 has
+            # used the result, and flagging that would train the reader to
+            # ignore the notice.
+            tolerance = max(abs(computed) * 0.02, 1e-9)
+            if any(abs(value - computed) <= tolerance for value in answer_values):
+                continue
+
+            note = (
+                f"The answer does not use the {display.get('calculation', 'calculation')} "
+                f"result, which computed {display.get('formatted', computed)} from the inputs "
+                f"it was given."
+            )
+            if produced_document:
+                note += (
+                    " The generated document was assembled from that result, so the document "
+                    "and this answer disagree — read the document before sending it on."
+                )
+            messages.append(note)
+        return messages
+
     def _synthesis_input(self, state: AgentState, evidence: list[EvidenceItem]) -> str:
         parts = [_with_history(state), "", build_evidence_prompt(evidence)]
         if state["scratchpad"]:
