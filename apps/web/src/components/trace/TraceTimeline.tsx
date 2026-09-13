@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ClipboardList,
   Database,
+  RefreshCw,
   ShieldAlert,
   FileCheck2,
   Route,
@@ -215,7 +216,9 @@ function describe(item: TraceItem): {
             ? `${item.tool} failed`
             : refused
               ? `${item.tool} declined the inputs`
-              : `${item.tool} completed`
+              : item.retried
+                ? `${item.tool} completed on checked inputs`
+                : `${item.tool} completed`
           : `Calling ${item.tool}`,
         body: (
           <div className="mt-1 space-y-1.5">
@@ -225,6 +228,15 @@ function describe(item: TraceItem): {
               <pre className="overflow-x-auto rounded-lg border border-border bg-surface-raised px-1.5 py-1 font-mono text-2xs text-fg-muted">
                 {JSON.stringify(item.args, null, 0).slice(0, 240)}
               </pre>
+            ) : null}
+            {item.retried ? (
+              <p className="flex items-start gap-1.5 text-2xs leading-relaxed text-fg-subtle">
+                <RefreshCw size={11} className="mt-px shrink-0" aria-hidden />
+                <span>
+                  The first arguments did not match the sources, so they were read again and
+                  corrected before the tool ran. These are the values it ran on.
+                </span>
+              </p>
             ) : null}
             {item.error ? (
               item.refused ? (

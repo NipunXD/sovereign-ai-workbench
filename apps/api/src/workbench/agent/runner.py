@@ -663,7 +663,7 @@ class AgentRunner:
             return []
 
     async def _bind_args(
-        self, state: AgentState, step: PlanStep
+        self, state: AgentState, step: PlanStep, correction: str = ""
     ) -> tuple[dict[str, Any], str | None]:
         """Fill in a tool call's arguments from what the run has actually found.
 
@@ -677,8 +677,13 @@ class AgentRunner:
         spec = self.tools.spec(step.tool or "")
         schema = spec.input_model.model_json_schema()
 
-        # If the planner already produced valid arguments, keep them.
-        if step.args:
+        # If the planner already produced valid arguments, keep them — unless
+        # this is a second attempt, in which case those are exactly the
+        # arguments a tool has just rejected. The shortcut is why the retry
+        # looked broken in two measured runs: a refusal is semantic, the args
+        # still fit the schema, so binding returned them untouched and the
+        # caller saw nothing to re-dispatch.
+        if step.args and not correction:
             try:
                 spec.input_model.model_validate(step.args)
                 return step.args, None
@@ -728,6 +733,14 @@ class AgentRunner:
                                 f"Question: {state['user_input']}\n"
                                 f"This step: {step.description}\n\n{evidence_text}\n\n"
                                 f"Earlier tool results:\n{prior}"
+                                + (
+                                    "\n\nYour previous arguments for this step were "
+                                    f"rejected: {correction}\nRead the sources again and "
+                                    "correct them. The rejection names what is wrong; do "
+                                    "not repeat the same values."
+                                    if correction
+                                    else ""
+                                )
                             ),
                         ),
                     ],
@@ -954,6 +967,7 @@ class AgentRunner:
         )
 
         collected: list[TraceEvent] = []
+        retried = False
 
         async def emit(name: str, data: dict[str, Any]) -> None:
             collected.append(TraceEvent(name, data))
@@ -973,7 +987,60 @@ class AgentRunner:
             return
 
         budget.tool_calls_used += 1
+
+        # A refusal is a correctable mistake, and the message says how: it
+        # names the reading the sources actually record for that year. Left
+        # alone, the run carried on without the calculation and the model did
+        # the arithmetic in prose — the one outcome a calculation tool exists
+        # to prevent. So the arguments are bound once more with the rejection
+        # in front of the binder.
+        #
+        # Not retried for a tool behind the approval gate: the first call has
+        # already been through a person, and a second would ask them again for
+        # a decision they have made.
+        #
+        # The headroom checked is tool calls, not budget.exhausted. The wall
+        # clock is advisory here — on local models a normal run passes 300s and
+        # carries on to a good answer — so gating on exhaustion meant the retry
+        # never fired on the runs it was written for. A measured run reached
+        # the refusal at 707s and skipped it.
+        headroom = budget.tool_calls_used < budget.max_tool_calls
+        if result.refused and not self.tools.requires_approval(step.tool) and headroom:
+            # The rejected attempt is held, not emitted. If the correction
+            # works, nothing derived from those arguments ever existed — the
+            # tool never ran on them — and a discarded attempt drawn as a
+            # refused call reads to anyone watching as a step that went wrong.
+            # One step, one call, one result; the correction is reported on
+            # the call that actually ran.
+            first_attempt = list(collected)
+            collected.clear()
+            retry_args, retry_error = await self._bind_args(
+                state, step, correction=result.error or ""
+            )
+            if not retry_error and retry_args and retry_args != step.args:
+                budget.tool_calls_used += 1
+                try:
+                    retry_result = await self.tools.dispatch(step.tool, retry_args, ctx)
+                except Exception as exc:
+                    # The retry breaking must not lose the refusal that
+                    # prompted it, which is the more informative of the two.
+                    state["errors"].append({"node": "act", "tool": step.tool, "error": str(exc)})
+                else:
+                    step.args = retry_args
+                    result = retry_result
+                    retried = True
+            if not retried:
+                # Nothing was re-run, so the refusal stands as the record —
+                # and it must be seen. A refusal nobody is shown is a silent
+                # missing calculation, which is worse than an honest amber.
+                collected[:] = first_attempt
+
         for event in collected:
+            # Marked so the card can say this call is the corrected one,
+            # rather than presenting a clean result that quietly replaced a
+            # rejected attempt.
+            if retried and event.name == EventName.TOOL_RESULT:
+                event.data["retried"] = True
             yield event
 
         step.result_summary = result.summary()

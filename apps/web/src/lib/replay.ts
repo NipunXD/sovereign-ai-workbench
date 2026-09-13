@@ -104,6 +104,7 @@ export function applyEvent(
         ok: Boolean(payload.ok),
         error: payload.error ? String(payload.error) : undefined,
         refused: Boolean(payload.refused),
+        retried: Boolean(payload.retried),
         metrics: payload.metrics as Record<string, unknown> | undefined,
         display: payload.display as Record<string, unknown> | undefined,
       });
