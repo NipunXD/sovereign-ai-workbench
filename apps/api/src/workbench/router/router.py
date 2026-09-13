@@ -189,6 +189,16 @@ class ModelRouter:
     async def route(self, request: RouteRequest) -> RouteDecision:
         """Decide the lane and model for one request."""
         started = time.perf_counter()
+
+        # A backend that came up after the service did is otherwise invisible
+        # until someone restarts it, and the only symptom is that every answer
+        # comes from the fallback model. Costs one model listing, at most once
+        # a minute, and only while something is actually marked missing.
+        if self.registry.stale():
+            try:
+                await self.registry.probe_availability()
+            except Exception as exc:  # a probe that fails must not fail the request
+                log.warning("availability_reprobe_failed", error=str(exc))
         features = extract(
             request.text,
             has_images=request.has_images,

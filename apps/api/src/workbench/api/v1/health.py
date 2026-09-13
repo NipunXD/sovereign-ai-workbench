@@ -183,6 +183,30 @@ async def models(request: Request) -> dict[str, Any]:
     }
 
 
+@router.post("/models/reload")
+async def reload_models(request: Request) -> dict[str, Any]:
+    """Re-read the manifest and re-ask each backend what it serves.
+
+    The registry re-probes on its own once a backend is marked missing, but an
+    operator who has just started LM Studio should not have to wait out a
+    timer, or guess whether the wait is why answers look thin.
+    """
+    registry = getattr(request.app.state, "registry", None)
+    if registry is None:
+        return {"models": {}, "reloaded": False}
+
+    registry.load()
+    availability = await registry.probe_availability()
+    residency = getattr(request.app.state, "residency", None)
+    if residency is not None:
+        await residency.sync_from_providers()
+    return {
+        "reloaded": True,
+        "available": sorted(name for name, ok in availability.items() if ok),
+        "missing": sorted(name for name, ok in availability.items() if not ok),
+    }
+
+
 @router.get("/models/routing-stats")
 async def routing_stats(request: Request) -> dict[str, Any]:
     """Lane distribution and decision latency, for the admin dashboard."""

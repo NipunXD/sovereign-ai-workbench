@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from pathlib import Path
 from typing import Any
 
@@ -67,6 +68,10 @@ class ModelRegistry:
         #: Logical names confirmed present on their backend. Empty until
         #: ``probe_availability`` runs; see ``lane_candidates``.
         self._available: set[str] | None = None
+        #: When that probe last ran. A backend started after the service —
+        #: which on a demo machine is most of the time — is otherwise invisible
+        #: until a restart. See ``stale``.
+        self._probed_at: float = 0.0
         self.load()
 
     # ------------------------------------------------------------------ load
@@ -279,6 +284,7 @@ class ModelRegistry:
                 available.add(logical)
 
         self._available = available
+        self._probed_at = time.monotonic()
         missing = sorted(name for name, ok in report.items() if not ok)
         if missing:
             log.warning(
@@ -287,6 +293,24 @@ class ModelRegistry:
                 hint="run scripts/pull_models.sh",
             )
         return report
+
+    def stale(self, ttl_s: float = 60.0) -> bool:
+        """Whether the availability picture is worth taking again.
+
+        Only when something is currently marked absent. A backend that was up
+        at boot and is up now needs no re-asking, and probing every request
+        would put a model listing in front of every question. But a backend
+        started *after* the service — the app launched before LM Studio, which
+        on a demo machine is most of the time — leaves its models marked
+        missing forever, and the reasoning lane quietly collapses to whatever
+        last-resort model is on the other backend. That is not an error
+        anywhere. It is just worse answers, with nothing on screen to say why.
+        """
+        if self._available is None:
+            return False
+        if len(self._available) >= len(self._models):
+            return False
+        return time.monotonic() - self._probed_at >= ttl_s
 
     def is_available(self, logical_name: str) -> bool:
         """Whether the backend confirmed it serves this model."""
