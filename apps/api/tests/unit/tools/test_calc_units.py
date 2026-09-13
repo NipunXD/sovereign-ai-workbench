@@ -224,3 +224,95 @@ class TestDatedReadings:
         )
         assert result.ok, result.error
         assert result.data.value == pytest.approx(0.55, rel=1e-3)
+
+
+TABLE = """Sheet: All Readings
+Tag | CML | Year | Thickness_mm
+V-1201 | CML-01 | 2019 | 14.2
+V-1201 | CML-01 | 2023 | 13.85
+V-1201 | CML-04 | 2019 | 13.9
+V-1201 | CML-04 | 2023 | 12.5
+V-1201 | CML-04 | 2029 | 9.2"""
+
+
+def _ctx(sources: list[str]):
+    from workbench.tools.base import ToolContext
+
+    return ToolContext(principal=None, run_context={"source_text": sources})  # type: ignore[arg-type]
+
+
+class TestReadingsCheckedAgainstTheSources:
+    """Self-consistent dates are not enough.
+
+    Given the right years and a thickness that belongs to a different one, the
+    calculator will divide two real numbers that never described the same pair
+    of measurements. On a real run it took the 2019 thickness labelled 2023,
+    with the 2029 reading beside it, returned 0.7833 mm/year, and the report
+    was written from it. Only the source says which reading belongs to which
+    date, so the source is what decides.
+    """
+
+    async def test_a_thickness_dated_to_the_wrong_year_is_refused(self) -> None:
+        tool = EngineeringCalcTool()
+        result = await tool.run(
+            CalcInput(
+                calculation="corrosion_rate",
+                inputs={
+                    "initial_thickness": "13.90 mm",  # the 2019 reading
+                    "initial_year": "2023",
+                    "current_thickness": "9.20 mm",
+                    "current_year": "2029",
+                    "interval": "6 year",
+                    "location": "CML-04",
+                },
+            ),
+            _ctx([TABLE]),
+        )
+        assert result.ok is False
+        # Naming the reading that *is* recorded is what makes it actionable.
+        assert "12.5 mm" in (result.error or "")
+        assert "2023" in (result.error or "")
+
+    async def test_the_right_pair_passes(self) -> None:
+        tool = EngineeringCalcTool()
+        result = await tool.run(
+            CalcInput(
+                calculation="corrosion_rate",
+                inputs={
+                    "initial_thickness": "12.50 mm",
+                    "initial_year": "2023",
+                    "current_thickness": "9.20 mm",
+                    "current_year": "2029",
+                    "interval": "6 year",
+                    "location": "CML-04",
+                },
+            ),
+            _ctx([TABLE]),
+        )
+        assert result.ok, result.error
+        assert result.data.value == pytest.approx(0.55, rel=1e-3)
+
+    async def test_an_identifier_is_not_mistaken_for_a_reading(self) -> None:
+        """CML-04 must not be reported as "04 mm" recorded for that year."""
+        from workbench.tools.calc import readings_recorded_for
+
+        assert readings_recorded_for("2023", [TABLE], "CML-04") == ["12.5"]
+
+    async def test_sources_that_cannot_say_do_not_refuse(self) -> None:
+        """A scanned table whose columns came out of order says nothing about
+        any year, and refusing on that basis would refuse the document."""
+        tool = EngineeringCalcTool()
+        result = await tool.run(
+            CalcInput(
+                calculation="corrosion_rate",
+                inputs={
+                    "initial_thickness": "13.90 mm",
+                    "initial_year": "2023",
+                    "current_thickness": "9.20 mm",
+                    "current_year": "2029",
+                    "interval": "6 year",
+                },
+            ),
+            _ctx(["Inspection Report V-1201 — Shell Thickness Survey March 2029"]),
+        )
+        assert result.ok, result.error

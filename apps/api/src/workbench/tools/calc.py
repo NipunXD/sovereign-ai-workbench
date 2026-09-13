@@ -63,7 +63,7 @@ PARAMETERS: dict[str, dict[str, Any]] = {
         # being picked out of a table. Optional, because a report sometimes
         # quotes a loss over a period without dating either end — but when both
         # are given the interval is computed from them rather than believed.
-        "optional": ["initial_year", "current_year"],
+        "optional": ["initial_year", "current_year", "location"],
         "aliases": {
             "final_thickness": "current_thickness",
             "later_thickness": "current_thickness",
@@ -81,6 +81,9 @@ PARAMETERS: dict[str, dict[str, Any]] = {
             "later_year": "current_year",
             "final_year": "current_year",
             "current_date": "current_year",
+            "cml": "location",
+            "point": "location",
+            "measurement_location": "location",
         },
     },
     "remaining_life": {
@@ -202,6 +205,79 @@ def normalise_quantity(text: str) -> str:
             # rather than "0.5499999999999999 mm/year".
             return f"{round(value, 10):g} {match.group('numerator')}/{match.group('denominator')}"
     return cleaned
+
+
+#: Inputs that are labels rather than measurements. They must not go through
+#: the unit parser, which would reject "CML-04" as an undefined unit.
+TEXT_INPUTS = frozenset({"location"})
+
+#: A thickness plausible for a vessel wall, used to tell a reading apart from
+#: the year sitting beside it in the same table row.
+_PLAUSIBLE_MM = (0.1, 500.0)
+
+#: A standalone number. The leading guard keeps the digits inside an
+#: identifier out of it — CML-04 is a location, and reporting that the sources
+#: record "04 mm" for a year is worse than saying nothing.
+_NUMBER = re.compile(r"(?<![A-Za-z0-9_.\-/])\d+(?:\.\d+)?")
+
+
+def readings_recorded_for(year: str, sources: list[str], location: str | None = None) -> list[str]:
+    """Thicknesses the sources put beside a given year.
+
+    The authoritative source here is a spreadsheet whose rows read
+    ``V-1201 | CML-04 | 2023 | 12.5``, so a reading and its date sit on one
+    line. Lines mentioning the year but carrying no plausible thickness — a
+    report title, a commissioning date — yield nothing and leave the caller
+    unable to conclude anything, which is the right outcome rather than a
+    guess.
+    """
+    found: list[str] = []
+    for source in sources:
+        for line in source.splitlines():
+            if year not in line:
+                continue
+            if location and location.lower() not in line.lower():
+                continue
+            for token in _NUMBER.findall(line):
+                if token == year:
+                    continue
+                try:
+                    value = float(token)
+                except ValueError:
+                    continue
+                if _PLAUSIBLE_MM[0] <= value <= _PLAUSIBLE_MM[1] and token not in found:
+                    found.append(token)
+    return found
+
+
+def contradicts_sources(
+    year: str, thickness: Any, sources: list[str], location: str | None = None
+) -> str | None:
+    """Whether the sources record a different reading for that year.
+
+    The check the dimensional one cannot make. Given self-consistent dates the
+    calculator will happily divide two thicknesses that never belonged to those
+    years — on a real run it was handed the 2019 thickness labelled 2023, with
+    the 2029 reading beside it, and every number was real. Only the source says
+    which reading belongs to which date.
+
+    Returns a message when the sources clearly disagree, and None when they
+    agree or cannot say. Silence on "cannot say" is deliberate: a scanned table
+    whose columns came out of order says nothing about any year, and refusing
+    on that basis would refuse the document.
+    """
+    recorded = readings_recorded_for(year, sources, location)
+    if not recorded:
+        return None
+    claimed = round(float(thickness.to("mm").magnitude), 4)
+    if any(abs(float(value) - claimed) < 0.005 for value in recorded):
+        return None
+    listed = ", ".join(f"{value} mm" for value in recorded[:6])
+    where = f" at {location}" if location else ""
+    return (
+        f"the sources record {listed} for {year}{where}, not {claimed:g} mm. "
+        f"Check that each thickness belongs to the year given for it."
+    )
 
 
 def normalise_inputs(calculation: str, raw: dict[str, str]) -> tuple[dict[str, str], list[str]]:
@@ -327,10 +403,30 @@ class EngineeringCalcTool(BaseTool):
 
         try:
             quantities: dict[str, Any] = {
-                key: _units.Quantity(value) for key, value in cleaned.items()
+                key: value if key in TEXT_INPUTS else _units.Quantity(value)
+                for key, value in cleaned.items()
             }
         except (pint.UndefinedUnitError, pint.DimensionalityError, TypeError, ValueError) as exc:
             return ToolResult.failure(f"could not parse the inputs: {exc}")
+
+        # Checked against the documents before the arithmetic, not after: a
+        # figure that was never in the sources should not reach a result the
+        # report is then written from.
+        if args.calculation == "corrosion_rate":
+            sources = list((ctx.run_context or {}).get("source_text") or []) if ctx else []
+            location = cleaned.get("location")
+            for thickness_key, year_key in (
+                ("initial_thickness", "initial_year"),
+                ("current_thickness", "current_year"),
+            ):
+                year = cleaned.get(year_key)
+                if not year or thickness_key not in quantities:
+                    continue
+                problem = contradicts_sources(
+                    str(year).strip(), quantities[thickness_key], sources, location
+                )
+                if problem:
+                    return ToolResult.failure(problem)
 
         try:
             output = handler(quantities)

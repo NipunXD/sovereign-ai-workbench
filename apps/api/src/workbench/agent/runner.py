@@ -1017,6 +1017,11 @@ class AgentRunner:
                 for index, item in enumerate(state.get("evidence") or [], start=1)
             ],
             "tools": [record.get("tool", "") for record in state.get("tool_results") or []],
+            # The full retrieved text, not the truncated snippets a citation
+            # carries. A tool that wants to check an argument against the
+            # source — "is 13.90 mm really the 2023 reading?" — needs the row
+            # the figure sits in, and that is routinely past the snippet cut.
+            "source_text": [item.text for item in state.get("evidence") or []],
             "approved_by": approval.get("decided_by_username"),
             "approved_at": approval.get("decided_at"),
         }
