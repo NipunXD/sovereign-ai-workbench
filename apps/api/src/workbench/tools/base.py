@@ -106,6 +106,12 @@ class ToolResult:
     artifacts: list[dict[str, Any]] = field(default_factory=list)
     logs: str = ""
     metrics: dict[str, Any] = field(default_factory=dict)
+    #: A small, already-formatted view of the result for the trace panel.
+    #: Separate from ``data`` because that is sized for the model's context and
+    #: deliberately kept out of the timeline; this is sized for a person, and a
+    #: calculation whose working nobody can see is just a number from a model
+    #: again.
+    display: dict[str, Any] | None = None
     error: str | None = None
 
     @classmethod
@@ -118,13 +124,16 @@ class ToolResult:
         Full payloads stay out of the agent's context: a table query returning
         4,000 rows must not consume the window that the answer needs.
         """
-        return {
+        summary: dict[str, Any] = {
             "ok": self.ok,
             "error": self.error,
             "citations": len(self.citations),
             "artifacts": [a.get("filename", a.get("artifact_id", "")) for a in self.artifacts],
             "metrics": self.metrics,
         }
+        if self.display is not None:
+            summary["display"] = self.display
+        return summary
 
 
 @runtime_checkable

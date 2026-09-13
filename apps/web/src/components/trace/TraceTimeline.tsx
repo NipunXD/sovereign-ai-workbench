@@ -16,7 +16,7 @@ import {
 
 import { Chip } from "@/components/ui/primitives";
 import { cn, formatBytes, formatDuration } from "@/lib/utils";
-import type { TraceItem } from "@/lib/types";
+import type { CalculationDisplay, TraceItem } from "@/lib/types";
 import { useInspector } from "@/stores/inspector";
 
 /**
@@ -209,8 +209,10 @@ function describe(item: TraceItem): {
             : `${item.tool} completed`
           : `Calling ${item.tool}`,
         body: (
-          <div className="mt-1 space-y-1">
-            {item.args ? (
+          <div className="mt-1 space-y-1.5">
+            {isCalculation(item.display) ? (
+              <CalculationCard calc={item.display} />
+            ) : item.args ? (
               <pre className="overflow-x-auto rounded-lg border border-border bg-surface-raised px-1.5 py-1 font-mono text-2xs text-fg-muted">
                 {JSON.stringify(item.args, null, 0).slice(0, 240)}
               </pre>
@@ -324,5 +326,71 @@ export function ReasoningPanel({
         </p>
       </div>
     </details>
+  );
+}
+
+function isCalculation(display: unknown): display is CalculationDisplay {
+  return Boolean(display) && (display as CalculationDisplay).kind === "calculation";
+}
+
+/**
+ * A finished calculation, shown the way a calculation sheet is written.
+ *
+ * The point of doing this arithmetic in a tool rather than in the answer is
+ * that it can be checked, and a bare "0.2333 mm/year" in a trace line cannot
+ * be. So the inputs, the substitution, the result and the standard it follows
+ * are all here — and the assumptions, because "corrosion is uniform between
+ * the two measurements" is the sentence that decides whether the number means
+ * anything.
+ */
+function CalculationCard({ calc }: { calc: CalculationDisplay }) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-surface">
+      <div className="flex items-baseline gap-2 border-b border-border bg-surface-raised/60 px-2.5 py-1.5">
+        <span className="font-mono text-2xs text-fg-subtle">{calc.calculation}</span>
+        <span className="tnum ml-auto text-sm font-semibold text-fg">{calc.formatted}</span>
+      </div>
+
+      <dl className="space-y-1 px-2.5 py-2">
+        {Object.entries(calc.inputs).map(([name, value]) => (
+          <div key={name} className="flex items-baseline gap-2 text-2xs">
+            <dt className="min-w-0 truncate font-mono text-fg-subtle">{name}</dt>
+            <dd className="tnum ml-auto shrink-0 font-medium text-fg-muted">{value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <ol className="space-y-1.5 border-t border-border px-2.5 py-2">
+        {calc.steps.map((step) => (
+          <li key={step.description}>
+            <p className="text-2xs text-fg-subtle">{step.description}</p>
+            <p className="mt-0.5 font-mono text-2xs leading-relaxed text-fg">
+              {step.expression}
+              <span className="text-fg-subtle"> = </span>
+              <span className="font-semibold">{step.result}</span>
+            </p>
+          </li>
+        ))}
+      </ol>
+
+      {calc.assumptions.length || calc.caveats.length ? (
+        <div className="space-y-1 border-t border-border px-2.5 py-2">
+          {calc.caveats.map((note) => (
+            <p key={note} className="text-2xs leading-relaxed text-warn">
+              {note}
+            </p>
+          ))}
+          {calc.assumptions.map((note) => (
+            <p key={note} className="text-2xs leading-relaxed text-fg-subtle">
+              {note}
+            </p>
+          ))}
+        </div>
+      ) : null}
+
+      <p className="border-t border-border bg-surface-raised/40 px-2.5 py-1.5 text-2xs text-fg-subtle">
+        {calc.standard_ref}
+      </p>
+    </div>
   );
 }

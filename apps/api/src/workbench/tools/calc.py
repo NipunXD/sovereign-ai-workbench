@@ -13,6 +13,7 @@ mm/yr" is not something anyone should act on.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Literal
 
 import pint
@@ -22,6 +23,20 @@ from workbench.tools.base import BaseTool, ToolContext, ToolResult, ToolSpec
 
 #: One registry for the process; constructing one is expensive.
 _units: Any = pint.UnitRegistry()
+
+# Gauge pressure, which is how a refinery writes every pressure it has: the
+# corpus says "design pressure 18.0 barg" and pint has never heard of barg, so
+# the shell-thickness and MAWP calculations — the two an inspection engineer
+# actually reaches for — failed on their most ordinary input.
+#
+# Defined as equal to the absolute unit rather than offset by an atmosphere.
+# That is not a shortcut: the ASME and API formulas here take design pressure
+# as a gauge quantity, so the magnitude is used as written, and converting to
+# absolute would silently add 1 atm to every wall thickness.
+_units.define("barg = bar")
+_units.define("psig = psi")
+_units.define("kPag = kPa")
+_units.define("MPag = MPa")
 
 Calculation = Literal[
     "corrosion_rate",
@@ -121,6 +136,62 @@ PARAMETERS: dict[str, dict[str, Any]] = {
 }
 
 
+#: "6 year(s)" — a plural the model writes for a human. pint reads the "(s)" as
+#: multiplication by the second and hands back year·second, which is [time]**2
+#: and fails dimensional analysis for reasons nobody can act on.
+_PLURAL_PARENS = re.compile(r"\(\s*s\s*\)", re.IGNORECASE)
+
+#: "3.30 mm/6 year" — the model writing a rate as the change over the interval
+#: rather than per unit time. pint applies its own precedence and reads it as
+#: (mm / 6) * year, so [length]*[time] instead of [length]/[time]. Division is
+#: done here and the unit rewritten to the per-unit form the calculation wants.
+_RATE_OVER_INTERVAL = re.compile(
+    r"^\s*(?P<value>-?\d+(?:\.\d+)?)\s*(?P<numerator>[A-Za-z°µ]+)\s*/\s*"
+    r"(?P<divisor>\d+(?:\.\d+)?)\s*(?P<denominator>[A-Za-z°µ]+)\s*$"
+)
+
+#: "mm per year", "degC per hour" — written the way it is said aloud.
+_SPELLED_PER = re.compile(r"\s+per\s+", re.IGNORECASE)
+
+
+def _q(quantity: Any, places: int = 4) -> str:
+    """A quantity written the way an engineer writes it.
+
+    pint's compact format prints the magnitude as Python holds it, so
+    subtracting 12.5 from 13.9 shows its working as "1.4000000000000004 mm".
+    The arithmetic is right and the presentation destroys confidence in it,
+    which on a page headed "check this yourself" is the whole cost.
+    """
+    magnitude = round(float(quantity.magnitude), places)
+    return f"{magnitude:g} {quantity.units:~P}".strip()
+
+
+def normalise_quantity(text: str) -> str:
+    """Repair the unit strings a model writes but pint cannot read.
+
+    These are not the model being wrong about the engineering — the number and
+    the intent are right in every case here — they are the difference between
+    how a person writes a quantity and how a parser reads one. Rejecting them
+    produced a dimensional error that looked like a calculation failure, and
+    the run went on to do the arithmetic in prose instead, which is exactly
+    what this tool exists to prevent.
+    """
+    if not isinstance(text, str):
+        return text
+    cleaned = _PLURAL_PARENS.sub("", text).strip()
+    cleaned = _SPELLED_PER.sub("/", cleaned)
+
+    match = _RATE_OVER_INTERVAL.match(cleaned)
+    if match:
+        divisor = float(match.group("divisor"))
+        if divisor:
+            value = float(match.group("value")) / divisor
+            # Trailing zeros removed so the working reads "0.55 mm/year"
+            # rather than "0.5499999999999999 mm/year".
+            return f"{round(value, 10):g} {match.group('numerator')}/{match.group('denominator')}"
+    return cleaned
+
+
 def normalise_inputs(calculation: str, raw: dict[str, str]) -> tuple[dict[str, str], list[str]]:
     """Map aliases onto canonical names and drop anything unrecognised.
 
@@ -138,7 +209,7 @@ def normalise_inputs(calculation: str, raw: dict[str, str]) -> tuple[dict[str, s
         if canonical is None:
             ignored.append(key)
             continue
-        cleaned.setdefault(canonical, value)
+        cleaned.setdefault(canonical, normalise_quantity(value))
     return cleaned, ignored
 
 
@@ -264,6 +335,20 @@ class EngineeringCalcTool(BaseTool):
             ok=True,
             data=output,
             metrics={"calculation": args.calculation, "ignored_inputs": ignored},
+            # The working, for the panel. An engineer checking a wall thickness
+            # needs the substitution and the standard, not a bare figure.
+            display={
+                "kind": "calculation",
+                "calculation": output.calculation,
+                "formatted": output.formatted,
+                "value": output.value,
+                "unit": output.unit,
+                "standard_ref": output.standard_ref,
+                "inputs": dict(cleaned),
+                "steps": [step.model_dump() for step in output.steps],
+                "assumptions": list(output.assumptions),
+                "caveats": list(output.caveats),
+            },
         )
 
     # ------------------------------------------------------------ mechanical
@@ -297,12 +382,12 @@ class EngineeringCalcTool(BaseTool):
             steps=[
                 CalcStep(
                     description="Metal loss over the interval",
-                    expression=f"{initial:~P} − {current:~P}",
-                    result=f"{loss:~P}",
+                    expression=f"{_q(initial)} − {_q(current)}",
+                    result=f"{_q(loss)}",
                 ),
                 CalcStep(
                     description="Divide by the elapsed interval",
-                    expression=f"{loss:~P} ÷ {interval:~P}",
+                    expression=f"{_q(loss)} ÷ {_q(interval)}",
                     result=f"{rate.magnitude:.4f} mm/year",
                 ),
             ],
@@ -346,12 +431,12 @@ class EngineeringCalcTool(BaseTool):
             steps=[
                 CalcStep(
                     description="Thickness available for corrosion",
-                    expression=f"{current:~P} − {minimum:~P}",
-                    result=f"{available:~P}",
+                    expression=f"{_q(current)} − {_q(minimum)}",
+                    result=f"{_q(available)}",
                 ),
                 CalcStep(
                     description="Divide by the corrosion rate",
-                    expression=f"{available:~P} ÷ {rate:~P}",
+                    expression=f"{_q(available)} ÷ {_q(rate)}",
                     result=f"{life.magnitude:.2f} year",
                 ),
             ],
@@ -385,7 +470,7 @@ class EngineeringCalcTool(BaseTool):
             steps=[
                 CalcStep(
                     description="t = P·R / (S·E − 0.6·P)",
-                    expression=f"({pressure:~P} × {radius:~P}) / ({stress:~P} × {efficiency} − 0.6 × {pressure:~P})",
+                    expression=f"({_q(pressure)} × {_q(radius)}) / ({_q(stress)} × {efficiency} − 0.6 × {_q(pressure)})",
                     result=f"{thickness.magnitude:.3f} mm",
                 )
             ],
@@ -413,7 +498,7 @@ class EngineeringCalcTool(BaseTool):
             steps=[
                 CalcStep(
                     description="P = S·E·t / (R + 0.6·t)",
-                    expression=f"({stress:~P} × {efficiency} × {thickness:~P}) / ({radius:~P} + 0.6 × {thickness:~P})",
+                    expression=f"({_q(stress)} × {efficiency} × {_q(thickness)}) / ({_q(radius)} + 0.6 × {_q(thickness)})",
                     result=f"{mawp.magnitude:.3f} MPa",
                 )
             ],
@@ -470,7 +555,7 @@ class EngineeringCalcTool(BaseTool):
             steps=[
                 CalcStep(
                     description="Q = ṁ · cp · ΔT",
-                    expression=f"{flow:~P} × {cp:~P} × {delta_t:~P}",
+                    expression=f"{_q(flow)} × {_q(cp)} × {_q(delta_t)}",
                     result=f"{duty.magnitude:.2f} kW",
                 )
             ],

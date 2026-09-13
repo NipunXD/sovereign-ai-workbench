@@ -282,12 +282,36 @@ export interface ValidationReport {
   reason?: string;
 }
 
+/** A completed engineering calculation, with its working. */
+export interface CalculationDisplay {
+  kind: "calculation";
+  calculation: string;
+  formatted: string;
+  value: number;
+  unit: string;
+  standard_ref: string;
+  inputs: Record<string, string>;
+  steps: Array<{ description: string; expression: string; result: string }>;
+  assumptions: string[];
+  caveats: string[];
+}
+
 export type TraceItem =
   | { kind: "route"; at: number; data: RouteDecision }
   | { kind: "plan"; at: number; steps: PlanStep[]; rationale: string }
   | { kind: "step"; at: number; stepId: string; intent: string; description: string }
   | { kind: "retrieval"; at: number; query: string; hits: RetrievalHit[]; total: number }
-  | { kind: "tool"; at: number; tool: string; args?: Record<string, unknown>; ok?: boolean; error?: string; metrics?: Record<string, unknown> }
+  | {
+      kind: "tool";
+      at: number;
+      tool: string;
+      args?: Record<string, unknown>;
+      ok?: boolean;
+      error?: string;
+      metrics?: Record<string, unknown>;
+      /** A formatted view of the result, when the tool provides one. */
+      display?: CalculationDisplay | Record<string, unknown>;
+    }
   | { kind: "validation"; at: number; data: ValidationReport }
   | { kind: "artifact"; at: number; artifact: GeneratedArtifact }
   | { kind: "approval"; at: number; approval: ApprovalState }
