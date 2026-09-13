@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Check, ChevronDown, FlaskConical, Minus, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Chip, EmptyState, Panel, StatTile } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
@@ -97,7 +97,9 @@ export default function EvalsPage() {
 
 function SuiteCard({ suite }: { suite: EvalSuite }) {
   return (
-    <Panel className={cn("overflow-hidden", !suite.passed && "ring-1 ring-warn/30")}>
+    // Not overflow-hidden: the breakdown popover has to be able to escape the
+    // card. The corners are kept by rounding the footer instead.
+    <Panel className={cn(!suite.passed && "ring-1 ring-warn/30")}>
       <div className="card-header">
         <div className="min-w-0">
           <p className="card-title flex items-center gap-2">
@@ -131,7 +133,7 @@ function SuiteCard({ suite }: { suite: EvalSuite }) {
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border bg-surface-raised/40 px-4 py-2.5 text-2xs text-fg-subtle">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-b-xl border-t border-border bg-surface-raised/40 px-4 py-2.5 text-2xs text-fg-subtle">
         <span className="tnum">{suite.cases} cases</span>
         <span className="tnum">{formatSeconds(suite.duration_s)}</span>
         <span>{relativeTime(suite.ran_at)}</span>
@@ -179,6 +181,27 @@ const FAULT_TONE: Record<string, string> = {
  */
 function WordErrorBreakdown({ metrics }: { metrics: EvalMetric[] }) {
   const [open, setOpen] = useState(false);
+  const anchor = useRef<HTMLDivElement>(null);
+
+  // A popover rather than an expanding section: the cards sit two to a row and
+  // growing one of them by a table's height shoves its neighbour down the page
+  // every time somebody looks.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: PointerEvent) => {
+      if (!anchor.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
   const shares = new Map(
     metrics
       .filter((m) => m.key.startsWith(FAULT_PREFIX))
@@ -193,16 +216,18 @@ function WordErrorBreakdown({ metrics }: { metrics: EvalMetric[] }) {
     ofWords: shares.get(f.key) ?? 0,
     ofErrors: (shares.get(f.key) ?? 0) / total,
   }));
-  const layout = rows
-    .filter((r) => r.key === "spacing")
-    .reduce((sum, r) => sum + r.ofErrors, 0);
+  const layout = rows.filter((r) => r.key === "spacing").reduce((sum, r) => sum + r.ofErrors, 0);
 
   return (
-    <div className="border-t border-border">
+    <div ref={anchor} className="relative border-t border-border">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-surface-raised"
+        aria-expanded={open}
+        className={cn(
+          "flex w-full items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-surface-raised",
+          open && "bg-surface-raised",
+        )}
       >
         <ChevronDown
           size={13}
@@ -215,7 +240,7 @@ function WordErrorBreakdown({ metrics }: { metrics: EvalMetric[] }) {
       </button>
 
       {open ? (
-        <div className="space-y-3 bg-surface-raised/40 px-4 pb-4 pt-1">
+        <div className="absolute right-2 top-full z-30 mt-1 w-[min(26rem,calc(100vw-3rem))] animate-slide-up space-y-3 rounded-xl border border-border bg-surface p-4 shadow-popover">
           <div className="flex h-2 gap-0.5 overflow-hidden rounded-full bg-surface-sunken">
             {rows
               .filter((r) => r.ofErrors > 0)
@@ -229,28 +254,34 @@ function WordErrorBreakdown({ metrics }: { metrics: EvalMetric[] }) {
               ))}
           </div>
 
-          <table className="w-full border-collapse text-xs">
+          {/* table-fixed, so the description column is the one that gives way.
+              Left to itself the no-wrap numeric cells widened the table past
+              the popover and off the side of the screen. */}
+          <table className="w-full table-fixed border-collapse text-xs">
+            <caption className="sr-only">
+              What the word errors are, as a share of the errors and of all words
+            </caption>
             <thead>
               <tr className="text-2xs uppercase tracking-wider text-fg-subtle">
                 <th className="py-1 text-left font-semibold">Fault</th>
-                <th className="py-1 text-right font-semibold">Of errors</th>
-                <th className="py-1 text-right font-semibold">Of all words</th>
+                <th className="w-[4.5rem] py-1 pl-2 text-right font-semibold">Errors</th>
+                <th className="w-[4.5rem] py-1 pl-2 text-right font-semibold">Words</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.key} className="border-t border-border/70">
-                  <td className="py-1.5">
-                    <span className="flex items-center gap-2">
+                  <td className="py-1.5" title={`${r.label} — ${r.blurb}`}>
+                    <span className="flex min-w-0 items-center gap-2">
                       <span className={cn("h-2 w-2 shrink-0 rounded-full", FAULT_TONE[r.key])} />
-                      <span className="text-fg">{r.label}</span>
-                      <span className="truncate text-2xs text-fg-subtle">{r.blurb}</span>
+                      <span className="shrink-0 whitespace-nowrap text-fg">{r.label}</span>
+                      <span className="min-w-0 truncate text-2xs text-fg-subtle">{r.blurb}</span>
                     </span>
                   </td>
-                  <td className="tnum py-1.5 text-right font-semibold text-fg">
+                  <td className="tnum whitespace-nowrap py-1.5 pl-2 text-right font-semibold text-fg">
                     {(r.ofErrors * 100).toFixed(1)}%
                   </td>
-                  <td className="tnum py-1.5 text-right text-fg-subtle">
+                  <td className="tnum whitespace-nowrap py-1.5 pl-2 text-right text-fg-subtle">
                     {(r.ofWords * 100).toFixed(1)}%
                   </td>
                 </tr>
@@ -261,8 +292,7 @@ function WordErrorBreakdown({ metrics }: { metrics: EvalMetric[] }) {
           <p className="text-2xs leading-relaxed text-fg-subtle">
             Word error rate fails a word if any character in it differs, so one lost space costs
             several words and almost no character error. Punctuation and case are folded away
-            before scoring and cannot appear here. The column that governs whether a reading was
-            recognised correctly is character error ignoring spaces, above.
+            before scoring and cannot appear here.
           </p>
         </div>
       ) : null}
