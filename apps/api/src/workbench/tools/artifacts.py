@@ -390,6 +390,66 @@ def _safe_heading(heading: str) -> str:
     return heading
 
 
+#: A JSON key appearing mid-prose — the model closing the body string and
+#: starting a field of its own invention inside it. Under constrained decoding
+#: a string field accepts any characters, so the grammar cannot stop this; the
+#: leak is only visible afterwards.
+_LEAKED_JSON = re.compile(r"\"\s*,\s*\"[a-z_]{2,20}\"\s*:", re.IGNORECASE)
+
+#: The headers and rows of a table the model wrote into the body by mistake.
+_LEAKED_HEADERS = re.compile(r"\"headers\"\s*:\s*\[(.*?)\]", re.DOTALL)
+_LEAKED_ROWS = re.compile(r"\"rows\"\s*:\s*\[\s*(\[.*?\])\s*\]", re.DOTALL)
+_JSON_CELL = re.compile(r"\"([^\"]*)\"|(-?\d+(?:\.\d+)?)")
+
+
+def salvage_section(section: ReportSection) -> ReportSection:
+    """Recover a section whose body swallowed the JSON that followed it.
+
+    Seen in a signed report: a paragraph that ended
+    ``the following data:","table":{"headers":[...],"rows":[[...]]}`` and
+    printed exactly that into Word. The model had the table — it simply wrote
+    it inside the prose instead of into the fields beside it.
+
+    So the prose is cut at the leak and the table recovered from it when the
+    section has none of its own. Discarding the fragment outright would be
+    safe and would also throw away the readings, which are the part of the
+    report anybody actually wants.
+    """
+    # "3.30 mm \\/ 6 years" — a JSON-escaped slash that reached the page.
+    body = (section.body or "").replace("\\/", "/")
+    leak = _LEAKED_JSON.search(body)
+    if leak is None:
+        return section
+
+    fragment = body[leak.start() :]
+    prose = body[: leak.start()].rstrip().rstrip(",").rstrip()
+
+    headers = list(section.table_headers)
+    rows = [list(row) for row in section.table_rows]
+    if not headers:
+        found = _LEAKED_HEADERS.search(fragment)
+        if found:
+            headers = [cell for cell in _cells(found.group(1)) if cell]
+    if not rows:
+        found = _LEAKED_ROWS.search(fragment)
+        if found:
+            for raw_row in re.findall(r"\[([^\[\]]*)\]", found.group(1)):
+                cells = _cells(raw_row)
+                if cells:
+                    rows.append(cells)
+
+    log.warning(
+        "report_section_json_leak",
+        heading=section.heading,
+        recovered_table=bool(headers or rows),
+    )
+    return section.model_copy(update={"body": prose, "table_headers": headers, "table_rows": rows})
+
+
+def _cells(raw: str) -> list[str]:
+    return [(quoted or bare) for quoted, bare in _JSON_CELL.findall(raw)]
+
+
 def _section_trail(section: ReportSection) -> str:
     """The markers to attach to a section that carries none inline."""
     text = " ".join([section.body, *section.bullets, *(c for r in section.table_rows for c in r)])
@@ -401,7 +461,7 @@ def _section_trail(section: ReportSection) -> str:
 
 def _to_docx_spec(args: DocxInput) -> DocxSpec:
     blocks: list[Block] = []
-    for section in args.sections:
+    for section in (salvage_section(raw_section) for raw_section in args.sections):
         blocks.append(Block(type="heading", text=_safe_heading(section.heading), level=1))
 
         # Attribution. Inline [n] markers, when the model wrote them, say

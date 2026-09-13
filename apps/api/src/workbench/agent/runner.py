@@ -42,6 +42,7 @@ from workbench.agent.state import (
 from workbench.core.event_names import EventName
 from workbench.core.ids import prefixed_id
 from workbench.core.logging import get_logger
+from workbench.core.prose import plain_maths
 from workbench.providers.errors import ProviderResponseError
 from workbench.providers.types import ChatMessage, GenerationRequest, ImageRef
 from workbench.rag.citations import EvidenceItem, build_evidence_prompt, resolve_markers
@@ -1087,7 +1088,9 @@ class AgentRunner:
         draft = "".join(draft_parts)
         state["draft"] = draft
 
-        resolved = resolve_markers(draft, evidence)
+        # LaTeX out before markers are numbered, so the answer, the stored
+        # message and anything a report quotes from it all carry the same text.
+        resolved = resolve_markers(plain_maths(draft), evidence)
         state["final"] = resolved.text
         state["citations"] = resolved.citations
         for citation in resolved.citations:

@@ -78,6 +78,10 @@ SYNTHESIS_PROMPT = f"""{SOVEREIGN_PREAMBLE}
 
 Write the answer for a refinery engineer. Lead with the answer itself, then the \
 supporting detail. Use markdown. Keep it as short as the question allows.
+
+Write arithmetic in plain text — "3.3 mm / 6 years = 0.55 mm/year". No LaTeX, \
+no \\frac, no dollar signs: this is read as markdown and printed into Word, \
+and neither renders them.
 """
 
 SUFFICIENCY_PROMPT = """\
