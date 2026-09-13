@@ -26,8 +26,14 @@ nobody trusts is worse than no badge:
 
 A figure that is not found is not called a hallucination. It may have been
 computed — a corrosion rate derived from two readings appears in no document
-by construction. The report says what it knows: found, or not found, and in
-which source.
+by construction. Where the run *did* compute it, we can say so exactly: the
+calculator publishes the numbers it produced, and a figure matching one of
+them is marked computed rather than missing. That distinction matters more
+than it looks. A correct corrosion-rate answer was reading "2/4 figures in
+sources", and the two it flagged were the two the calculator had just derived
+under a named standard — the strongest part of the answer shown as its
+weakest. What remains unaccounted for is a number that is neither in a source
+nor in any tool result, which is the case worth a reader's attention.
 """
 
 from __future__ import annotations
@@ -148,6 +154,13 @@ class Figure:
     found: bool
     sources: list[int] = field(default_factory=list)
     """Citation numbers whose passage contains this value."""
+    computed: str = ""
+    """The calculation that produced it, when a tool did — e.g. "corrosion_rate"."""
+
+    @property
+    def accounted_for(self) -> bool:
+        """Found in a source, or produced by a calculation in this run."""
+        return self.found or bool(self.computed)
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -156,6 +169,7 @@ class Figure:
             "unit": self.unit,
             "found": self.found,
             "sources": self.sources,
+            "computed": self.computed,
         }
 
 
@@ -194,16 +208,24 @@ def extract(text: str) -> list[Figure]:
     return figures
 
 
-def verify(answer: str, sources: dict[int, str]) -> list[Figure]:
+def verify(
+    answer: str,
+    sources: dict[int, str],
+    derived: dict[str, str] | None = None,
+) -> list[Figure]:
     """Check each measurement in ``answer`` against the passages it cites.
 
     Args:
         answer: The resolved answer, markers already numbered.
         sources: Citation number to the full text of the passage behind it.
+        derived: Numbers this run calculated, from :func:`calculated`. A figure
+            in a source is reported as being in that source even if a tool also
+            produced it — the document is the better provenance of the two.
     """
     if not answer.strip():
         return []
     by_source = {n: _numbers_in(text) for n, text in sources.items()}
+    produced = derived or {}
     checked: list[Figure] = []
     for figure in extract(answer):
         found_in = sorted(n for n, numbers in by_source.items() if figure.value in numbers)
@@ -214,6 +236,35 @@ def verify(answer: str, sources: dict[int, str]) -> list[Figure]:
                 unit=figure.unit,
                 found=bool(found_in),
                 sources=found_in,
+                computed="" if found_in else produced.get(figure.value, ""),
             )
         )
     return checked
+
+
+def calculated(tool_results: list[dict[str, object]]) -> dict[str, str]:
+    """Numbers this run derived, mapped to the calculation that derived them.
+
+    Only outputs count: the final value and the result of each working step.
+    An *input* to the calculation is a reading from a document, and it should
+    stand or fall on whether it is in that document — crediting it here would
+    let a figure the model invented launder itself by being passed to a tool.
+    """
+    produced: dict[str, str] = {}
+    for result in tool_results:
+        display = result.get("display")
+        if not isinstance(display, dict) or display.get("kind") != "calculation":
+            continue
+        if not result.get("ok"):
+            continue
+        name = str(display.get("calculation") or "calculation")
+        outputs: list[object] = [display.get("value")]
+        steps = display.get("steps")
+        if isinstance(steps, list):
+            outputs += [s.get("result") for s in steps if isinstance(s, dict)]
+        for output in outputs:
+            if output is None:
+                continue
+            for number in re.findall(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?", str(output)):
+                produced.setdefault(normalise(number), name)
+    return produced

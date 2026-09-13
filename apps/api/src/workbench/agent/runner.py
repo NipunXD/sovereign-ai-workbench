@@ -1213,7 +1213,12 @@ class AgentRunner:
         # "where did that number come from" is the question worth answering
         # regardless of how well the paragraph around it is cited.
         report.figures = [
-            f.as_dict() for f in numerics.verify(resolved.text, self._cited_text(state, resolved))
+            f.as_dict()
+            for f in numerics.verify(
+                resolved.text,
+                self._cited_text(state, resolved),
+                numerics.calculated(state.get("tool_results") or []),
+            )
         ]
 
         sentences = [

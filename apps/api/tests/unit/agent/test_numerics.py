@@ -6,8 +6,11 @@ attached to it. Every other check passes that answer.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
+from workbench.agent import numerics
 from workbench.agent.numerics import extract, normalise, verify
 
 SOURCE = (
@@ -84,3 +87,65 @@ class TestVerification:
 
     def test_empty_answer_is_not_an_error(self) -> None:
         assert verify("", {1: SOURCE}) == []
+
+
+#: One successful corrosion-rate call, as the runner records it.
+RESULT: dict[str, Any] = {
+    "ok": True,
+    "display": {
+        "kind": "calculation",
+        "calculation": "corrosion_rate",
+        "value": 0.55,
+        "steps": [
+            {"description": "Metal lost", "expression": "12.5 mm − 9.2 mm", "result": "3.3 mm"}
+        ],
+        "inputs": {"initial_thickness": "12.5 mm", "current_thickness": "9.2 mm"},
+    },
+}
+
+
+class TestCalculatedFigures:
+    """A number the run derived is not a number the run failed to source."""
+
+    def test_a_derived_figure_is_marked_computed(self) -> None:
+        figures = numerics.verify(
+            "The rate is 0.55 mm/year [1].",
+            {1: "CML-04 measured 9.2 mm in 2029."},
+            numerics.calculated([RESULT]),
+        )
+        rate = next(f for f in figures if f.value == "0.55")
+        assert rate.found is False
+        assert rate.computed == "corrosion_rate"
+        assert rate.accounted_for is True
+
+    def test_a_step_result_counts_too(self) -> None:
+        figures = numerics.verify("Metal lost: 3.3 mm.", {}, numerics.calculated([RESULT]))
+        assert figures[0].computed == "corrosion_rate"
+
+    def test_the_source_wins_when_both_have_it(self) -> None:
+        """A document is better provenance than our own arithmetic."""
+        figures = numerics.verify(
+            "The 2029 reading is 9.2 mm [1].",
+            {1: "CML-04 measured 9.2 mm in 2029."},
+            numerics.calculated([RESULT]),
+        )
+        assert figures[0].found is True
+        assert figures[0].computed == ""
+
+    def test_an_input_is_not_laundered_by_being_passed_to_a_tool(self) -> None:
+        """Crediting inputs would let an invented reading clear itself by
+        being handed to the calculator."""
+        figures = numerics.verify(
+            "The 2023 reading was 12.5 mm.", {}, numerics.calculated([RESULT])
+        )
+        assert figures[0].accounted_for is False
+
+    def test_a_refused_calculation_produced_nothing(self) -> None:
+        refused = {"ok": False, "refused": True, "display": None}
+        assert numerics.calculated([refused]) == {}
+
+    def test_an_unrelated_figure_is_still_unaccounted_for(self) -> None:
+        figures = numerics.verify(
+            "Design pressure is 18.0 barg.", {}, numerics.calculated([RESULT])
+        )
+        assert figures[0].accounted_for is False

@@ -268,6 +268,8 @@ export interface CheckedFigure {
   found: boolean;
   /** Citation numbers whose passage contains it. */
   sources: number[];
+  /** The calculation that produced it, when the run derived it rather than read it. */
+  computed?: string;
 }
 
 export interface ValidationReport {
@@ -310,6 +312,8 @@ export type TraceItem =
       error?: string;
       /** The tool declined its inputs rather than breaking on them. */
       refused?: boolean;
+      /** This call is the retry of a refused one, with corrected arguments. */
+      retried?: boolean;
       metrics?: Record<string, unknown>;
       /** A formatted view of the result, when the tool provides one. */
       display?: CalculationDisplay | Record<string, unknown>;

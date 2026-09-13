@@ -1,6 +1,16 @@
 "use client";
 
-import { AlertTriangle, Check, ChevronDown, Clock, Database, Hash, Wrench, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  Clock,
+  Database,
+  Hash,
+  Sigma,
+  Wrench,
+  X,
+} from "lucide-react";
 import { useState } from "react";
 
 import { cn, formatDuration } from "@/lib/utils";
@@ -36,6 +46,9 @@ export function RunFooter({
   const grounded = validation ? Math.round(validation.grounded_ratio * 100) : null;
   const figures = validation?.figures ?? [];
   const verified = figures.filter((f) => f.found).length;
+  // A derived number is in no document by construction. Counting it against
+  // the answer showed the calculator's own output as the answer's weak point.
+  const derived = figures.filter((f) => !f.found && f.computed).length;
   const unsupported = validation?.unsupported ?? [];
   const invented = validation?.unresolved_citations?.length ?? 0;
   // A run that ended early — refused by policy, or replayed from a trace
@@ -56,7 +69,9 @@ export function RunFooter({
           <GroundingRing value={grounded} />
         ) : null}
 
-        {figures.length ? <FigureBadge verified={verified} total={figures.length} /> : null}
+        {figures.length ? (
+          <FigureBadge verified={verified} derived={derived} total={figures.length} />
+        ) : null}
 
         <Stat icon={<Database size={12} />} label={`${summary.evidence_used} passages read`} />
         <Stat
@@ -97,8 +112,8 @@ export function RunFooter({
               </ul>
               <p className="mt-2 text-2xs leading-relaxed text-fg-subtle">
                 Each measurement is searched for in the passage it cites, exactly as written.
-                A figure not found there was either calculated during the run or is not in the
-                documents — open the source and check it.
+                A figure the calculator produced is marked as calculated, with its working in
+                the trace. Anything left is in neither — open the source and check it.
               </p>
             </section>
           ) : null}
@@ -148,36 +163,71 @@ function Stat({ icon, label }: { icon: React.ReactNode; label: string }) {
   );
 }
 
-function FigureBadge({ verified, total }: { verified: number; total: number }) {
-  const all = verified === total;
+function FigureBadge({
+  verified,
+  derived,
+  total,
+}: {
+  verified: number;
+  derived: number;
+  total: number;
+}) {
+  const accounted = verified + derived;
+  const all = accounted === total;
   return (
     <span
       className={cn(
         "flex items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold ring-1 ring-inset",
         all ? "bg-ok/10 text-ok ring-ok/20" : "bg-warn/10 text-warn ring-warn/20",
       )}
-      title="Measurements found character-for-character in a cited passage"
+      title={
+        derived
+          ? `${verified} found character-for-character in a cited passage, ${derived} calculated during this run`
+          : "Measurements found character-for-character in a cited passage"
+      }
     >
       {all ? <Check size={11} /> : <AlertTriangle size={11} />}
       <span className="tnum">
-        {verified}/{total}
+        {accounted}/{total}
       </span>
-      figure{total === 1 ? "" : "s"} in sources
+      {derived ? (
+        <>
+          figure{total === 1 ? "" : "s"} traced
+          <span className="font-normal opacity-70">
+            ({verified} cited · {derived} calculated)
+          </span>
+        </>
+      ) : (
+        <>figure{total === 1 ? "" : "s"} in sources</>
+      )}
     </span>
   );
 }
 
 function FigureRow({ figure }: { figure: CheckedFigure }) {
+  // A number the calculator derived is in no document by construction, so it
+  // gets its own mark rather than the warning meant for an unsourced figure.
+  const computed = !figure.found && Boolean(figure.computed);
   return (
     <li className="flex items-baseline gap-2 text-xs">
       <span
         className={cn(
           "flex h-4 w-4 shrink-0 items-center justify-center rounded-full",
-          figure.found ? "bg-ok/15 text-ok" : "bg-warn/15 text-warn",
+          figure.found
+            ? "bg-ok/15 text-ok"
+            : computed
+              ? "bg-accent/15 text-accent"
+              : "bg-warn/15 text-warn",
         )}
         aria-hidden
       >
-        {figure.found ? <Check size={10} /> : <AlertTriangle size={9} />}
+        {figure.found ? (
+          <Check size={10} />
+        ) : computed ? (
+          <Sigma size={10} />
+        ) : (
+          <AlertTriangle size={9} />
+        )}
       </span>
       <span className="tnum font-mono font-medium text-fg">{figure.text}</span>
       <span className="min-w-0 flex-1 truncate text-fg-subtle">
@@ -186,6 +236,8 @@ function FigureRow({ figure }: { figure: CheckedFigure }) {
             found in {figure.sources.length === 1 ? "source" : "sources"}{" "}
             {figure.sources.map((n) => `[${n}]`).join(" ")}
           </>
+        ) : computed ? (
+          <>calculated in this run by {figure.computed}</>
         ) : (
           "not found in any cited source"
         )}
