@@ -1,11 +1,12 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Check, FlaskConical, Minus, X } from "lucide-react";
+import { Check, ChevronDown, FlaskConical, Minus, X } from "lucide-react";
+import { useState } from "react";
 
 import { Chip, EmptyState, Panel, StatTile } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
-import type { EvalMetric, EvalSuite } from "@/lib/types";
+import type { EvalCase, EvalMetric, EvalSuite } from "@/lib/types";
 import { cn, relativeTime } from "@/lib/utils";
 
 /**
@@ -118,18 +119,99 @@ function SuiteCard({ suite }: { suite: EvalSuite }) {
         </tbody>
       </table>
 
+      {suite.failures.length ? (
+        <div className="border-t border-border">
+          {suite.failures.map((failure) => (
+            <FailingCase key={failure.case_id} failure={failure} />
+          ))}
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border bg-surface-raised/40 px-4 py-2.5 text-2xs text-fg-subtle">
         <span className="tnum">{suite.cases} cases</span>
         <span className="tnum">{formatSeconds(suite.duration_s)}</span>
         <span>{relativeTime(suite.ran_at)}</span>
-        {suite.failed_cases.length ? (
-          <span className="font-medium text-warn">
-            failing: {suite.failed_cases.join(", ")}
-          </span>
+        {suite.failed_cases.length && !suite.failures.length ? (
+          <span className="font-medium text-warn">failing: {suite.failed_cases.join(", ")}</span>
         ) : null}
         {suite.error ? <span className="font-medium text-danger">{suite.error}</span> : null}
       </div>
     </Panel>
+  );
+}
+
+/**
+ * A case that did not pass, opened up.
+ *
+ * A bare case id is an accusation nobody can check. The question, what it was
+ * meant to do, what it did instead and the file it is defined in are all
+ * recoverable, so a reader can decide for themselves whether the failure is
+ * the system's or the test's — which is the only way a red mark on a
+ * self-reported metric means anything.
+ */
+function FailingCase({ failure }: { failure: EvalCase }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border-b border-border/70 last:border-b-0">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors hover:bg-surface-raised"
+        title={failure.prompt || undefined}
+      >
+        <ChevronDown
+          size={13}
+          className={cn("shrink-0 text-fg-subtle transition-transform", open && "rotate-180")}
+        />
+        <span className="rounded-full bg-warn/10 px-2 py-0.5 font-mono text-2xs font-semibold text-warn ring-1 ring-inset ring-warn/20">
+          {failure.case_id}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-xs text-fg-muted">
+          {failure.prompt || failure.detail || "failed"}
+        </span>
+      </button>
+
+      {open ? (
+        <dl className="space-y-3 bg-surface-raised/40 px-4 pb-4 pt-1 text-xs">
+          {failure.prompt ? (
+            <Field term="Asked">
+              <span className="text-fg">{failure.prompt}</span>
+            </Field>
+          ) : null}
+          {failure.expectation ? (
+            <Field term="Expected">
+              <span className="text-fg-muted">{failure.expectation}</span>
+            </Field>
+          ) : null}
+          {failure.detail ? (
+            <Field term="Why it failed">
+              <span className="text-warn">{failure.detail}</span>
+            </Field>
+          ) : null}
+          {failure.actual ? (
+            <Field term="What it answered">
+              <span className="block rounded-lg border-l-2 border-warn/50 bg-warn/[0.06] px-3 py-2 leading-relaxed text-fg-muted">
+                {failure.actual}
+              </span>
+            </Field>
+          ) : null}
+          {failure.source ? (
+            <Field term="Defined in">
+              <span className="font-mono text-2xs text-fg-subtle">{failure.source}</span>
+            </Field>
+          ) : null}
+        </dl>
+      ) : null}
+    </div>
+  );
+}
+
+function Field({ term, children }: { term: string; children: React.ReactNode }) {
+  return (
+    <div className="grid gap-1 sm:grid-cols-[7.5rem_minmax(0,1fr)] sm:gap-3">
+      <dt className="section-label sm:pt-0.5">{term}</dt>
+      <dd className="min-w-0">{children}</dd>
+    </div>
   );
 }
 

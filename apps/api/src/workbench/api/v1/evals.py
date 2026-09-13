@@ -49,8 +49,34 @@ SUITE_BLURB: dict[str, str] = {
     "router": "Whether each request reaches a model capable of serving it, and how long choosing costs.",
 }
 
+#: The gold set each suite is scored against. A failing case is only useful if
+#: you can see the question it was, and that lives in the dataset rather than
+#: in the result — the harness stores the verdict, not the prompt.
+SUITE_DATASET: dict[str, str] = {
+    "grounding": "grounding.jsonl",
+    "retrieval": "retrieval_qa.jsonl",
+    "router": "router_labels.jsonl",
+}
+
 #: Metrics where a smaller number is the better one.
 LOWER_IS_BETTER = {"cer", "cer_no_spaces", "wer", "hallucinated_citation_rate", "failed_run_rate"}
+
+
+class CaseOut(BaseModel):
+    """A case that did not pass, with enough context to judge it."""
+
+    case_id: str
+    #: The question as it appears in the gold set.
+    prompt: str = ""
+    #: What the case was supposed to do, in a sentence.
+    expectation: str = ""
+    #: The harness's verdict — why this counted as a failure.
+    detail: str = ""
+    #: What the system actually produced, trimmed.
+    actual: str = ""
+    #: Where the case is defined, so it can be found and changed.
+    source: str = ""
+    metrics: dict[str, float] = {}
 
 
 class MetricOut(BaseModel):
@@ -70,6 +96,7 @@ class SuiteOut(BaseModel):
     cases: int
     failed_cases: list[str]
     metrics: list[MetricOut]
+    failures: list[CaseOut] = []
     error: str = ""
 
 
@@ -102,6 +129,77 @@ def _newest_per_suite(directory: Path) -> dict[str, tuple[Path, dict[str, Any]]]
             if suite:
                 newest[suite] = (path, result)
     return newest
+
+
+def _gold_set(directory: Path, filename: str) -> dict[str, dict[str, Any]]:
+    """The dataset rows for a suite, keyed by case id."""
+    path = directory / filename
+    rows: dict[str, dict[str, Any]] = {}
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if isinstance(row, dict) and row.get("id"):
+                rows[str(row["id"])] = row
+    except (OSError, json.JSONDecodeError) as exc:
+        log.warning("eval_dataset_unreadable", path=str(path), error=str(exc))
+    return rows
+
+
+def _expectation(row: dict[str, Any]) -> str:
+    """What the case was supposed to do, said in one sentence.
+
+    Built from whichever keys the dataset uses rather than a per-suite branch:
+    the gold sets share an id and a prompt and otherwise describe themselves.
+    """
+    if "answerable" in row:
+        if not row["answerable"]:
+            note = str(row.get("note") or "").strip()
+            return (
+                f"Should refuse — {note}" if note else "Should refuse: the corpus cannot support it"
+            )
+        phrase = str(row.get("expect_phrase") or "").strip()
+        return (
+            f'Should answer, mentioning "{phrase}"' if phrase else "Should answer from the corpus"
+        )
+    if "expect_doc" in row or "expect_phrase" in row:
+        doc = str(row.get("expect_doc") or "").strip()
+        phrase = str(row.get("expect_phrase") or "").strip()
+        parts = [f"Should retrieve {doc}" if doc else "Should retrieve the right passage"]
+        if phrase:
+            parts.append(f'containing "{phrase}"')
+        return ", ".join(parts)
+    if "lane" in row:
+        return f"Should route to the {row['lane']} lane"
+    return str(row.get("note") or "")
+
+
+def _failures(
+    result: dict[str, Any], gold: dict[str, dict[str, Any]], source: str
+) -> list[CaseOut]:
+    out: list[CaseOut] = []
+    for case in result.get("cases") or []:
+        if case.get("passed"):
+            continue
+        case_id = str(case.get("case_id") or "")
+        row = gold.get(case_id, {})
+        out.append(
+            CaseOut(
+                case_id=case_id,
+                prompt=str(row.get("query") or row.get("text") or ""),
+                expectation=_expectation(row),
+                detail=str(case.get("detail") or ""),
+                actual=str(case.get("actual") or "")[:600],
+                source=f"{source}:{case_id}" if source else "",
+                metrics={
+                    k: float(v)
+                    for k, v in (case.get("metrics") or {}).items()
+                    if isinstance(v, int | float)
+                },
+            )
+        )
+    return out
 
 
 def _metrics(result: dict[str, Any]) -> list[MetricOut]:
@@ -141,6 +239,14 @@ async def latest_results(
 
     newest = await anyio.to_thread.run_sync(_newest_per_suite, directory)
 
+    gold: dict[str, dict[str, dict[str, Any]]] = {}
+    for name in newest:
+        filename = SUITE_DATASET.get(name)
+        if filename:
+            gold[name] = await anyio.to_thread.run_sync(
+                _gold_set, settings.eval_datasets_dir, filename
+            )
+
     suites = [
         SuiteOut(
             suite=name,
@@ -155,6 +261,11 @@ async def latest_results(
                 if not case.get("passed")
             ],
             metrics=_metrics(result),
+            failures=_failures(
+                result,
+                gold.get(name, {}),
+                f"evals/datasets/{SUITE_DATASET[name]}" if name in SUITE_DATASET else "",
+            ),
             error=str(result.get("error") or ""),
         )
         for name, (path, result) in sorted(newest.items())

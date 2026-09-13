@@ -489,6 +489,22 @@ export interface EvalMetric {
   lower_is_better: boolean;
 }
 
+/** A case that did not pass, with enough context to judge it. */
+export interface EvalCase {
+  case_id: string;
+  /** The question as written in the gold set. */
+  prompt: string;
+  /** What the case was supposed to do. */
+  expectation: string;
+  /** The harness's verdict — why this counted as a failure. */
+  detail: string;
+  /** What the system actually produced. */
+  actual: string;
+  /** Where the case is defined, so it can be found and changed. */
+  source: string;
+  metrics: Record<string, number>;
+}
+
 export interface EvalSuite {
   suite: string;
   blurb: string;
@@ -498,6 +514,7 @@ export interface EvalSuite {
   cases: number;
   failed_cases: string[];
   metrics: EvalMetric[];
+  failures: EvalCase[];
   error: string;
 }
 

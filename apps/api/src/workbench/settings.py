@@ -94,6 +94,7 @@ class Settings(BaseSettings):
     data_dir: Path = REPO_ROOT / "data" / "runtime"
     seed_dir: Path = REPO_ROOT / "data" / "seed"
     eval_results_dir: Path = REPO_ROOT / "evals" / "results"
+    eval_datasets_dir: Path = REPO_ROOT / "evals" / "datasets"
     template_dir: Path = REPO_ROOT / "data" / "templates"
 
     # -------------------------------------------------------------------- api
