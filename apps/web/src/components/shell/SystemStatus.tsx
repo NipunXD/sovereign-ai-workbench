@@ -101,12 +101,22 @@ export function SystemStatus() {
               </div>
               <ul className="mt-2 space-y-0.5">
                 {residency.models.map((model) => (
-                  <li key={model.logical_name} className="flex items-center justify-between text-2xs">
-                    <span className="font-mono text-fg-muted">
-                      {model.logical_name}
+                  <li key={model.logical_name} className="flex items-baseline justify-between gap-2 text-2xs">
+                    <span className="min-w-0">
+                      <span className="font-mono text-fg-muted">{model.logical_name}</span>
                       {model.pinned ? <span className="ml-1 text-accent">pinned</span> : null}
+                      {model.also_serves?.length ? (
+                        // The same weights under other names. Worth saying, or
+                        // the rows look like they are missing models.
+                        <span
+                          className="ml-1 text-fg-subtle"
+                          title={`Same weights also serve ${model.also_serves.join(", ")}`}
+                        >
+                          +{model.also_serves.length}
+                        </span>
+                      ) : null}
                     </span>
-                    <span className="tnum text-fg-subtle">{model.size_gb.toFixed(1)} GB</span>
+                    <span className="tnum shrink-0 text-fg-subtle">{model.size_gb.toFixed(1)} GB</span>
                   </li>
                 ))}
               </ul>

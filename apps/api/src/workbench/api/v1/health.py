@@ -8,6 +8,9 @@ from typing import Any
 from fastapi import APIRouter, Request
 
 from workbench import __version__
+from workbench.core.logging import get_logger
+
+log = get_logger(__name__)
 
 router = APIRouter(tags=["health"])
 
@@ -64,6 +67,17 @@ async def readiness(request: Request) -> dict[str, Any]:
     # --- residency ---
     residency = getattr(app.state, "residency", None)
     if residency is not None:
+        # Reconciled before it is read. Backends evict on their own timers —
+        # LM Studio unloads a just-in-time model after an hour idle — and
+        # nothing was calling this, so the ledger drifted: the workbench went
+        # on reporting a model as resident and pinned while LM Studio had long
+        # since dropped it. That made the memory budget on screen wrong and,
+        # worse, let routing prefer a "resident" model that was not there and
+        # then pay the cold load anyway.
+        try:
+            await residency.sync_from_providers()
+        except Exception as exc:  # a stale figure beats no readiness at all
+            log.debug("residency_sync_failed", error=str(exc))
         components["residency"] = residency.snapshot()
 
     healthy = (

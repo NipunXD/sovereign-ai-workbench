@@ -115,17 +115,23 @@ export interface ModelInfo {
   resident: boolean;
 }
 
+export interface ResidentModel {
+  logical_name: string;
+  physical_id?: string;
+  /** Other logical names served by the same loaded weights. */
+  also_serves?: string[];
+  size_gb: number;
+  pinned: boolean;
+  idle_s?: number;
+  mean_load_s?: number;
+}
+
 export interface ResidencySnapshot {
   max_resident_gb: number;
   resident_gb: number;
   allow_swap: boolean;
-  models: Array<{
-    logical_name: string;
-    size_gb: number;
-    pinned: boolean;
-    idle_s: number;
-    mean_load_s: number;
-  }>;
+  /** One entry per physical model, not per logical name. */
+  models: ResidentModel[];
 }
 
 export interface ModelsResponse {

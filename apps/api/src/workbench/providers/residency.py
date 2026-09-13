@@ -77,7 +77,25 @@ class ResidencyManager:
     # ---------------------------------------------------------------- state
     @property
     def resident_gb(self) -> float:
-        return sum(entry.size_gb for entry in self._entries.values())
+        """What is actually in memory, charged once per physical model.
+
+        Several logical names share one physical model — reasoning.primary,
+        coding.primary and longctx.primary are all qwen3-8b — so summing the
+        entries charged a single loaded model three times and reported 26 GB
+        of a 14 GB budget for three models that were really there. That number
+        drives admission control as well as the display, so the manager was
+        also evicting to make room it already had.
+
+        The largest estimate for a physical model wins: the manifest gives
+        longctx.primary more RAM than reasoning.primary for the same weights
+        because its context window is larger, and the KV cache is real memory.
+        """
+        by_physical: dict[str, float] = {}
+        for logical, entry in self._entries.items():
+            info = self.registry.models.get(logical)
+            physical = info.physical_id if info else logical
+            by_physical[physical] = max(by_physical.get(physical, 0.0), entry.size_gb)
+        return sum(by_physical.values())
 
     def is_resident(self, logical_name: str) -> bool:
         return logical_name in self._entries
@@ -101,21 +119,42 @@ class ResidencyManager:
         return DEFAULT_SWAP_COST_S * max(0.5, info.approx_ram_gb / 6.0)
 
     def snapshot(self) -> dict[str, object]:
-        """Current state, for the admin UI's residency meter."""
-        return {
-            "max_resident_gb": self.max_resident_gb,
-            "resident_gb": round(self.resident_gb, 2),
-            "allow_swap": self.allow_swap,
-            "models": [
-                {
+        """Current state, for the admin UI's residency meter.
+
+        One row per *physical* model. Three logical names can resolve to the
+        same weights — reasoning.primary, coding.primary and longctx.primary
+        are all qwen3-8b — and listing them separately printed six rows whose
+        sizes summed to more than the total above them, which is the kind of
+        arithmetic a reader checks and then stops trusting the rest of the
+        page. The aliases travel with the row instead.
+        """
+        grouped: dict[str, dict[str, object]] = {}
+        for entry in sorted(self._entries.values(), key=lambda e: e.last_used, reverse=True):
+            info = self.registry.models.get(entry.logical_name)
+            physical = info.physical_id if info else entry.logical_name
+            row = grouped.get(physical)
+            if row is None:
+                grouped[physical] = {
                     "logical_name": entry.logical_name,
+                    "physical_id": physical,
+                    "also_serves": [],
                     "size_gb": entry.size_gb,
                     "pinned": entry.pinned,
                     "idle_s": round(time.monotonic() - entry.last_used, 1),
                     "mean_load_s": round(entry.mean_load_s, 2),
                 }
-                for entry in sorted(self._entries.values(), key=lambda e: e.last_used, reverse=True)
-            ],
+                continue
+            # The same weights under another name: keep the larger estimate,
+            # and stay pinned if any of the names is pinned.
+            row["also_serves"] = [*row["also_serves"], entry.logical_name]  # type: ignore[misc]
+            row["size_gb"] = max(float(row["size_gb"]), entry.size_gb)  # type: ignore[arg-type]
+            row["pinned"] = bool(row["pinned"]) or entry.pinned
+
+        return {
+            "max_resident_gb": self.max_resident_gb,
+            "resident_gb": round(self.resident_gb, 2),
+            "allow_swap": self.allow_swap,
+            "models": list(grouped.values()),
         }
 
     # ------------------------------------------------------------ activation
@@ -255,42 +294,64 @@ class ResidencyManager:
                 log.warning("pinned_model_warm_failed", model=info.logical_name, error=str(exc))
 
     async def sync_from_providers(self) -> None:
-        """Reconcile our accounting with what backends actually report.
+        """Reconcile our accounting with what the backends actually hold.
 
-        Backends evict on their own idle timers, so bookkeeping drifts. Anything
-        we believe is resident but the provider no longer lists gets dropped —
-        otherwise the budget slowly fills with models that are not really there.
+        The ledger drifts in both directions and both matter.
+
+        It drifts *high* because backends evict on their own timers — LM Studio
+        drops a just-in-time model an hour after it was last used — and we go
+        on charging its size against the budget, so the budget slowly fills
+        with models that are not there.
+
+        It drifts *low* because a model can be loaded without us: the obvious
+        case is a machine warmed before a demonstration, where somebody pins
+        the chat model by hand so the first question is not a cold start. We
+        would report that memory as free, and the honest number on the admin
+        page is the one the operator is using to decide whether to load
+        anything else.
+
+        Correcting only the first direction, which is what this did, left the
+        System page claiming a model was resident and pinned while the backend
+        had long since unloaded it — and left the model that *was* loaded
+        missing from the budget entirely.
         """
-        actually_resident: set[str] = set()
+        # One poll per provider. This used to ask each backend again for every
+        # entry it owned, which on a manifest with nine models meant nine
+        # round trips to say one thing.
+        reported: dict[str, set[str]] = {}
         for provider_name, provider in self.registry.providers.items():
             try:
-                reported = await provider.resident_models()
+                models = await provider.resident_models()
             except Exception as exc:
-                # A backend that cannot be polled is skipped, not fatal — but
-                # silently skipping it is how residency accounting drifts out
-                # of step with reality and nobody knows why.
+                # A backend that cannot be polled is skipped rather than
+                # treated as empty: "I could not ask" and "nothing is loaded"
+                # must not produce the same correction.
                 log.debug("residency_poll_failed", provider=provider_name, error=str(exc))
                 continue
-            if not reported:
-                continue
-            physical_ids = {model.physical_id for model in reported}
-            for logical, info in self.registry.models.items():
-                if info.provider == provider_name and info.physical_id in physical_ids:
-                    actually_resident.add(logical)
+            if models:
+                reported[provider_name] = {model.physical_id for model in models}
 
-        for logical in list(self._entries):
-            entry_info = self.registry.models.get(logical)
-            if entry_info is None:
+        if not reported:
+            return
+
+        resident: set[str] = {
+            logical
+            for logical, info in self.registry.models.items()
+            if info.physical_id in reported.get(info.provider, ())
+        }
+
+        for logical, info in self.registry.models.items():
+            if info.provider not in reported:
+                # This backend does not report residency; leave our own
+                # accounting for it alone.
                 continue
-            entry_provider = self.registry.providers.get(entry_info.provider)
-            if entry_provider is None:
-                continue
-            # Only trust the reconciliation for backends that report residency.
-            try:
-                reported = await entry_provider.resident_models()
-            except Exception as exc:
-                log.debug("residency_poll_failed", provider=entry_info.provider, error=str(exc))
-                continue
-            if reported and logical not in actually_resident:
+            if logical in resident and logical not in self._entries:
+                log.debug("residency_adopted", model=logical, size_gb=info.approx_ram_gb)
+                self._entries[logical] = _Entry(
+                    logical_name=logical,
+                    size_gb=info.approx_ram_gb,
+                    pinned=False,
+                )
+            elif logical not in resident and logical in self._entries:
                 log.debug("residency_drift_corrected", model=logical)
                 self._entries.pop(logical, None)
