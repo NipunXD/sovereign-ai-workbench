@@ -58,12 +58,19 @@ Calculation = Literal[
 #: produces an error naming the parameters that were expected.
 PARAMETERS: dict[str, dict[str, Any]] = {
     "corrosion_rate": {
-        "required": ["initial_thickness", "current_thickness", "interval"],
-        # Naming the year each reading came from is what stops the wrong pair
-        # being picked out of a table. Optional, because a report sometimes
-        # quotes a loss over a period without dating either end — but when both
-        # are given the interval is computed from them rather than believed.
-        "optional": ["initial_year", "current_year", "location"],
+        # Location is required. A corrosion rate is a property of one
+        # measurement point, and a table holds a reading for that year at every
+        # other point too — so without it the source check has to compare
+        # against every CML on the vessel and a reading lifted from the wrong
+        # one passes. Naming the point is also the cheapest way to make the
+        # model commit to which row it is reading.
+        "required": ["initial_thickness", "current_thickness", "interval", "location"],
+        # The years stay optional because a report sometimes quotes a loss over
+        # a period without dating either end, and refusing that would refuse
+        # the source. When both are given the interval is computed from them
+        # rather than believed, and the readings are checked against the
+        # documents; when they are not, the result says so.
+        "optional": ["initial_year", "current_year"],
         "aliases": {
             "final_thickness": "current_thickness",
             "later_thickness": "current_thickness",
@@ -367,11 +374,12 @@ class EngineeringCalcTool(BaseTool):
         description=(
             "Perform a standard refinery engineering calculation with dimensional "
             "checking. Every quantity must carry its unit, e.g. '9.2 mm', '6 year', "
-            "'15 bar'. When a reading is dated in the source, give the year as well "
-            "— for corrosion_rate pass initial_year and current_year, and the "
-            "interval is computed from them and checked against the one you give. "
-            "Take both thicknesses from the same pair of dates the question asks "
-            "about. Required inputs per calculation — " + describe_parameters()
+            "'15 bar'. For corrosion_rate, name the measurement location (the CML) "
+            "and give initial_year and current_year: the interval is computed from "
+            "the dates, and each thickness is checked against the reading the "
+            "sources record for that year at that location. Take both thicknesses "
+            "from the same pair of dates the question asks about. Required inputs "
+            "per calculation — " + describe_parameters()
         ),
         input_model=CalcInput,
         output_model=CalcOutput,
@@ -520,6 +528,11 @@ class EngineeringCalcTool(BaseTool):
                 "sensitive to measurement error."
             )
 
+        if not derived_from_years:
+            caveats.append(
+                "The readings were not dated, so neither could be checked against the "
+                "sources and the interval is the one supplied."
+            )
         if derived_from_years:
             caveats.append(
                 f"Interval taken from the dates given ({initial_year.magnitude:g} to "  # type: ignore[union-attr]

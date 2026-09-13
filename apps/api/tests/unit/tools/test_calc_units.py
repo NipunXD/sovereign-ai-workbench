@@ -54,6 +54,7 @@ class TestCalculationsThatUsedToFail:
                     "initial_thickness": "13.90 mm",
                     "current_thickness": "12.50 mm",
                     "interval": "6 year(s)",
+                    "location": "CML-04",
                 },
             ),
             None,
@@ -107,6 +108,7 @@ class TestWorkingIsLegible:
                 inputs={
                     "initial_thickness": "13.90 mm",
                     "current_thickness": "12.50 mm",
+                    "location": "CML-04",
                     "interval": "6 year",
                 },
             ),
@@ -159,6 +161,7 @@ class TestDatedReadings:
                 inputs={
                     "initial_thickness": "13.90 mm",
                     "current_thickness": "12.50 mm",
+                    "location": "CML-04",
                     "interval": "6 year",
                     "initial_year": "2019",
                     "current_year": "2023",
@@ -179,6 +182,7 @@ class TestDatedReadings:
                 inputs={
                     "initial_thickness": "12.50 mm",
                     "current_thickness": "9.20 mm",
+                    "location": "CML-04",
                     "interval": "6 year",
                     "initial_year": "2023",
                     "current_year": "2029",
@@ -198,6 +202,7 @@ class TestDatedReadings:
                 inputs={
                     "initial_thickness": "9.20 mm",
                     "current_thickness": "12.50 mm",
+                    "location": "CML-04",
                     "interval": "6 year",
                     "initial_year": "2029",
                     "current_year": "2023",
@@ -217,6 +222,7 @@ class TestDatedReadings:
                 inputs={
                     "initial_thickness": "12.50 mm",
                     "current_thickness": "9.20 mm",
+                    "location": "CML-04",
                     "interval": "6 year",
                 },
             ),
@@ -310,9 +316,75 @@ class TestReadingsCheckedAgainstTheSources:
                     "initial_year": "2023",
                     "current_thickness": "9.20 mm",
                     "current_year": "2029",
+                    "location": "CML-04",
                     "interval": "6 year",
                 },
             ),
             _ctx(["Inspection Report V-1201 — Shell Thickness Survey March 2029"]),
         )
         assert result.ok, result.error
+
+
+class TestLocationIsRequired:
+    """A corrosion rate is a property of one measurement point.
+
+    A thickness table holds a reading for the same year at every other point on
+    the vessel, so without knowing which point is meant the source check has to
+    compare against all of them — and a reading lifted from the wrong CML
+    passes. Naming it is also the cheapest way to make the model commit to
+    which row of the table it is reading.
+    """
+
+    async def test_a_corrosion_rate_without_a_location_is_refused(self) -> None:
+        tool = EngineeringCalcTool()
+        result = await tool.run(
+            CalcInput(
+                calculation="corrosion_rate",
+                inputs={
+                    "initial_thickness": "12.50 mm",
+                    "current_thickness": "9.20 mm",
+                    "interval": "6 year",
+                },
+            ),
+            _ctx([TABLE]),
+        )
+        assert result.ok is False
+        assert "location" in (result.error or "")
+
+    async def test_a_reading_from_the_wrong_point_is_caught(self) -> None:
+        """13.85 mm is a real 2023 reading — at CML-01, not CML-04."""
+        tool = EngineeringCalcTool()
+        result = await tool.run(
+            CalcInput(
+                calculation="corrosion_rate",
+                inputs={
+                    "initial_thickness": "13.85 mm",
+                    "initial_year": "2023",
+                    "current_thickness": "9.20 mm",
+                    "current_year": "2029",
+                    "interval": "6 year",
+                    "location": "CML-04",
+                },
+            ),
+            _ctx([TABLE]),
+        )
+        assert result.ok is False
+        assert "12.5 mm" in (result.error or "")
+
+    async def test_undated_readings_say_they_were_not_checked(self) -> None:
+        """The result must not look as though it passed a check it skipped."""
+        tool = EngineeringCalcTool()
+        result = await tool.run(
+            CalcInput(
+                calculation="corrosion_rate",
+                inputs={
+                    "initial_thickness": "12.50 mm",
+                    "current_thickness": "9.20 mm",
+                    "interval": "6 year",
+                    "location": "CML-04",
+                },
+            ),
+            _ctx([TABLE]),
+        )
+        assert result.ok, result.error
+        assert any("not dated" in c for c in result.data.caveats)

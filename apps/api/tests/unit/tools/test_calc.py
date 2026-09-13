@@ -31,6 +31,11 @@ def ctx() -> ToolContext:
 
 
 async def run(tool: EngineeringCalcTool, ctx: ToolContext, calculation: str, **inputs: str):
+    # A corrosion rate belongs to one measurement point, so the tool requires
+    # the location. Defaulted here because these tests are about the
+    # arithmetic; the ones that are about the location supply their own.
+    if calculation == "corrosion_rate":
+        inputs.setdefault("location", "CML-04")
     return await tool.run(tool.parse_args({"calculation": calculation, "inputs": inputs}), ctx)
 
 
