@@ -59,6 +59,11 @@ Calculation = Literal[
 PARAMETERS: dict[str, dict[str, Any]] = {
     "corrosion_rate": {
         "required": ["initial_thickness", "current_thickness", "interval"],
+        # Naming the year each reading came from is what stops the wrong pair
+        # being picked out of a table. Optional, because a report sometimes
+        # quotes a loss over a period without dating either end — but when both
+        # are given the interval is computed from them rather than believed.
+        "optional": ["initial_year", "current_year"],
         "aliases": {
             "final_thickness": "current_thickness",
             "later_thickness": "current_thickness",
@@ -69,6 +74,13 @@ PARAMETERS: dict[str, dict[str, Any]] = {
             "elapsed_time": "interval",
             "period": "interval",
             "years": "interval",
+            "from_year": "initial_year",
+            "earlier_year": "initial_year",
+            "initial_date": "initial_year",
+            "to_year": "current_year",
+            "later_year": "current_year",
+            "final_year": "current_year",
+            "current_date": "current_year",
         },
     },
     "remaining_life": {
@@ -279,7 +291,11 @@ class EngineeringCalcTool(BaseTool):
         description=(
             "Perform a standard refinery engineering calculation with dimensional "
             "checking. Every quantity must carry its unit, e.g. '9.2 mm', '6 year', "
-            "'15 bar'. Required inputs per calculation — " + describe_parameters()
+            "'15 bar'. When a reading is dated in the source, give the year as well "
+            "— for corrosion_rate pass initial_year and current_year, and the "
+            "interval is computed from them and checked against the one you give. "
+            "Take both thicknesses from the same pair of dates the question asks "
+            "about. Required inputs per calculation — " + describe_parameters()
         ),
         input_model=CalcInput,
         output_model=CalcOutput,
@@ -324,6 +340,12 @@ class EngineeringCalcTool(BaseTool):
             # The check that earns this tool its place: a wrong unit combination
             # fails loudly instead of producing a plausible wrong number.
             return ToolResult.failure(f"dimensional error: {exc}")
+        except ValueError as exc:
+            # Raised by a handler when the inputs contradict each other — a
+            # pair of readings whose dates do not match the interval given.
+            # The message is written for the reader, so it is passed through
+            # rather than prefixed with the exception class.
+            return ToolResult.failure(str(exc))
         except ZeroDivisionError:
             return ToolResult.failure("division by zero — check the interval or rate inputs")
         except Exception as exc:
@@ -359,10 +381,38 @@ class EngineeringCalcTool(BaseTool):
         current = q["current_thickness"].to("mm")
         interval = q["interval"].to("year")
 
+        caveats: list[str] = []
+        derived_from_years = False
+
+        # The interval the model asserts is the weakest input here. Asked for
+        # the 2023 and 2029 readings, a real run supplied the 2019 and 2023
+        # thicknesses and an interval of six years — each value present in the
+        # sources, the combination belonging to no pair of measurements that
+        # exists. Nothing in three loose quantities ties a thickness to its
+        # date, so when the dates are given the interval is computed from them.
+        initial_year = q.get("initial_year")
+        current_year = q.get("current_year")
+        if initial_year is not None and current_year is not None:
+            span = float(current_year.magnitude) - float(initial_year.magnitude)
+            if span <= 0:
+                raise ValueError(
+                    f"the later reading is dated {current_year.magnitude:g} and the earlier one "
+                    f"{initial_year.magnitude:g}. Check which reading is which."
+                )
+            stated = interval.magnitude
+            if abs(span - stated) > 0.5:
+                raise ValueError(
+                    f"the readings are dated {initial_year.magnitude:g} and "
+                    f"{current_year.magnitude:g}, which is {span:g} years apart, but the "
+                    f"interval given is {stated:g} years. One of the two is wrong — check "
+                    f"that the thicknesses belong to the years named."
+                )
+            interval = span * _units("year")
+            derived_from_years = True
+
         loss = initial - current
         rate = (loss / interval).to("mm/year")
 
-        caveats: list[str] = []
         if loss.magnitude < 0:
             caveats.append(
                 "The current reading is thicker than the initial one. This usually "
@@ -372,6 +422,12 @@ class EngineeringCalcTool(BaseTool):
             caveats.append(
                 "The interval is under a year, so the extrapolated annual rate is "
                 "sensitive to measurement error."
+            )
+
+        if derived_from_years:
+            caveats.append(
+                f"Interval taken from the dates given ({initial_year.magnitude:g} to "  # type: ignore[union-attr]
+                f"{current_year.magnitude:g}), not from the interval supplied."  # type: ignore[union-attr]
             )
 
         return CalcOutput(

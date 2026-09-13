@@ -137,3 +137,90 @@ class TestDimensionalCheckingStillBites:
         )
         assert result.ok is False
         assert "dimensional" in (result.error or "").lower()
+
+
+class TestDatedReadings:
+    """The interval is the weakest input in a corrosion rate.
+
+    Three loose quantities — two thicknesses and a span — give a model no way
+    to tie a reading to its date, and no way for the tool to notice when it
+    has not. Asked for the 2023 and 2029 readings, a real run supplied the
+    2019 and 2023 thicknesses with an interval of six years: every value
+    present in the sources, the combination belonging to no pair of
+    measurements that exists. It was arithmetically correct and meaningless,
+    and the report was written from it.
+    """
+
+    async def test_thicknesses_and_dates_that_disagree_are_refused(self) -> None:
+        tool = EngineeringCalcTool()
+        result = await tool.run(
+            CalcInput(
+                calculation="corrosion_rate",
+                inputs={
+                    "initial_thickness": "13.90 mm",
+                    "current_thickness": "12.50 mm",
+                    "interval": "6 year",
+                    "initial_year": "2019",
+                    "current_year": "2023",
+                },
+            ),
+            None,
+        )
+        assert result.ok is False
+        assert "4 years apart" in (result.error or "")
+        # The message has to say which two things disagree, or it cannot be acted on.
+        assert "2019" in (result.error or "") and "2023" in (result.error or "")
+
+    async def test_the_interval_comes_from_the_dates_not_the_claim(self) -> None:
+        tool = EngineeringCalcTool()
+        result = await tool.run(
+            CalcInput(
+                calculation="corrosion_rate",
+                inputs={
+                    "initial_thickness": "12.50 mm",
+                    "current_thickness": "9.20 mm",
+                    "interval": "6 year",
+                    "initial_year": "2023",
+                    "current_year": "2029",
+                },
+            ),
+            None,
+        )
+        assert result.ok, result.error
+        assert result.data.value == pytest.approx(0.55, rel=1e-3)
+        assert any("2023 to 2029" in c for c in result.data.caveats)
+
+    async def test_readings_supplied_in_the_wrong_order_are_refused(self) -> None:
+        tool = EngineeringCalcTool()
+        result = await tool.run(
+            CalcInput(
+                calculation="corrosion_rate",
+                inputs={
+                    "initial_thickness": "9.20 mm",
+                    "current_thickness": "12.50 mm",
+                    "interval": "6 year",
+                    "initial_year": "2029",
+                    "current_year": "2023",
+                },
+            ),
+            None,
+        )
+        assert result.ok is False
+        assert "which reading is which" in (result.error or "")
+
+    async def test_undated_readings_still_work(self) -> None:
+        """A report often quotes a loss over a period without dating either end."""
+        tool = EngineeringCalcTool()
+        result = await tool.run(
+            CalcInput(
+                calculation="corrosion_rate",
+                inputs={
+                    "initial_thickness": "12.50 mm",
+                    "current_thickness": "9.20 mm",
+                    "interval": "6 year",
+                },
+            ),
+            None,
+        )
+        assert result.ok, result.error
+        assert result.data.value == pytest.approx(0.55, rel=1e-3)
