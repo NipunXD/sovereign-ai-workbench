@@ -113,11 +113,15 @@ function SuiteCard({ suite }: { suite: EvalSuite }) {
 
       <table className="w-full border-collapse text-sm">
         <tbody>
-          {suite.metrics.map((metric) => (
-            <MetricRow key={metric.key} metric={metric} />
-          ))}
+          {suite.metrics
+            .filter((metric) => !metric.key.startsWith(FAULT_PREFIX))
+            .map((metric) => (
+              <MetricRow key={metric.key} metric={metric} />
+            ))}
         </tbody>
       </table>
+
+      <WordErrorBreakdown metrics={suite.metrics} />
 
       {suite.failures.length ? (
         <div className="border-t border-border">
@@ -137,6 +141,132 @@ function SuiteCard({ suite }: { suite: EvalSuite }) {
         {suite.error ? <span className="font-medium text-danger">{suite.error}</span> : null}
       </div>
     </Panel>
+  );
+}
+
+const FAULT_PREFIX = "wer_share_";
+
+//: What each bucket means, in the order a reader should meet them: the errors
+//: that change meaning first, the ones that change only layout last.
+const FAULTS: Array<{ key: string; label: string; blurb: string }> = [
+  { key: "misread", label: "Misread", blurb: "the recogniser could not read the word" },
+  { key: "one_char", label: "One character off", blurb: "same length, a single character wrong" },
+  { key: "missing_extra", label: "Dropped or invented", blurb: "a word absent from one side" },
+  { key: "spacing", label: "Spacing only", blurb: "identical characters, a lost or added space" },
+];
+
+const FAULT_TONE: Record<string, string> = {
+  misread: "bg-danger",
+  one_char: "bg-warn",
+  missing_extra: "bg-classification-confidential",
+  spacing: "bg-info",
+};
+
+/**
+ * What the wrong words are actually wrong about.
+ *
+ * Word error rate counts a word as failed if any character in it differs, so a
+ * single lost space costs several words while costing almost no character
+ * error. On its own the headline reads as "one word in five was misrecognised",
+ * which is not what happened — most of those words have identical characters
+ * and differ only in where the spaces fell.
+ *
+ * Shown as a share of the *errors* rather than of the document, so the bars
+ * total a hundred. The two accountings do not reconcile exactly — word error
+ * rate is an edit distance over sequences, this is a classification of the
+ * differing runs — and presenting it as a percentage of the document would
+ * invite a subtraction that does not come out.
+ */
+function WordErrorBreakdown({ metrics }: { metrics: EvalMetric[] }) {
+  const [open, setOpen] = useState(false);
+  const shares = new Map(
+    metrics
+      .filter((m) => m.key.startsWith(FAULT_PREFIX))
+      .map((m) => [m.key.slice(FAULT_PREFIX.length), m.value]),
+  );
+  if (!shares.size) return null;
+
+  const total = [...shares.values()].reduce((sum, v) => sum + v, 0);
+  if (total <= 0) return null;
+  const rows = FAULTS.filter((f) => shares.has(f.key)).map((f) => ({
+    ...f,
+    ofWords: shares.get(f.key) ?? 0,
+    ofErrors: (shares.get(f.key) ?? 0) / total,
+  }));
+  const layout = rows
+    .filter((r) => r.key === "spacing")
+    .reduce((sum, r) => sum + r.ofErrors, 0);
+
+  return (
+    <div className="border-t border-border">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-surface-raised"
+      >
+        <ChevronDown
+          size={13}
+          className={cn("shrink-0 text-fg-subtle transition-transform", open && "rotate-180")}
+        />
+        <span className="text-xs font-medium text-fg-muted">What the word errors are</span>
+        <span className="tnum ml-auto text-2xs text-fg-subtle">
+          {(layout * 100).toFixed(0)}% are spacing, not misreading
+        </span>
+      </button>
+
+      {open ? (
+        <div className="space-y-3 bg-surface-raised/40 px-4 pb-4 pt-1">
+          <div className="flex h-2 gap-0.5 overflow-hidden rounded-full bg-surface-sunken">
+            {rows
+              .filter((r) => r.ofErrors > 0)
+              .map((r) => (
+                <span
+                  key={r.key}
+                  className={cn("h-full rounded-full", FAULT_TONE[r.key])}
+                  style={{ width: `${r.ofErrors * 100}%` }}
+                  title={`${r.label}: ${(r.ofErrors * 100).toFixed(1)}% of word errors`}
+                />
+              ))}
+          </div>
+
+          <table className="w-full border-collapse text-xs">
+            <thead>
+              <tr className="text-2xs uppercase tracking-wider text-fg-subtle">
+                <th className="py-1 text-left font-semibold">Fault</th>
+                <th className="py-1 text-right font-semibold">Of errors</th>
+                <th className="py-1 text-right font-semibold">Of all words</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.key} className="border-t border-border/70">
+                  <td className="py-1.5">
+                    <span className="flex items-center gap-2">
+                      <span className={cn("h-2 w-2 shrink-0 rounded-full", FAULT_TONE[r.key])} />
+                      <span className="text-fg">{r.label}</span>
+                      <span className="truncate text-2xs text-fg-subtle">{r.blurb}</span>
+                    </span>
+                  </td>
+                  <td className="tnum py-1.5 text-right font-semibold text-fg">
+                    {(r.ofErrors * 100).toFixed(1)}%
+                  </td>
+                  <td className="tnum py-1.5 text-right text-fg-subtle">
+                    {(r.ofWords * 100).toFixed(1)}%
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <p className="text-2xs leading-relaxed text-fg-subtle">
+            Word error rate fails a word if any character in it differs, so one lost space costs
+            several words and almost no character error. Punctuation and case are folded away
+            before scoring and cannot appear here. The column that governs whether a reading was
+            recognised correctly is character error ignoring spaces, above.
+          </p>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

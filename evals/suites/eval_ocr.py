@@ -17,8 +17,10 @@ import json
 from pathlib import Path
 
 from evals.harness.metrics import (
+    WORD_FAULTS,
     character_error_rate,
     character_error_rate_ignoring_spaces,
+    word_error_composition,
     word_error_rate,
 )
 from evals.harness.registry import CaseResult, SuiteResult, suite
@@ -70,6 +72,10 @@ async def run() -> SuiteResult:
     wers: list[float] = []
     confidences: list[float] = []
     escalations = 0
+    #: Summed across documents rather than averaged per document, so a long
+    #: page counts for more than a short one — which is what a reader assumes
+    #: "12% of words" means.
+    faults = dict.fromkeys((*WORD_FAULTS, "words"), 0)
 
     for entry in scanned:
         expected = truth.get(entry["doc_id"], "")
@@ -85,6 +91,8 @@ async def run() -> SuiteResult:
         cer = character_error_rate(expected, recognised.text)
         cer_ns = character_error_rate_ignoring_spaces(expected, recognised.text)
         wer = word_error_rate(expected, recognised.text)
+        for bucket, count in word_error_composition(expected, recognised.text).items():
+            faults[bucket] += count
         cers.append(cer)
         cers_no_spaces.append(cer_ns)
         wers.append(wer)
@@ -120,6 +128,16 @@ async def run() -> SuiteResult:
             "escalation_rate": escalations / count,
             "render_dpi": float(dpi),
             "cases": float(count),
+            # What the wrong words are wrong about, as shares of the document.
+            # Reported because the headline WER is unreadable without it: most
+            # of those words have identical letters and differ only in a space
+            # or a full stop.
+            **{
+                f"wer_share_{bucket}": (
+                    faults[bucket] / faults["words"] if faults["words"] else 0.0
+                )
+                for bucket in WORD_FAULTS
+            },
         },
         thresholds={"cer": ("<=", 0.12), "cer_no_spaces": ("<=", 0.05)},
     )

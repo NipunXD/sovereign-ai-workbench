@@ -148,6 +148,80 @@ class ConfusionSummary:
         return f"{expected}→{actual} ({count})"
 
 
+#: The buckets a wrong word falls into, worst first. Order is the reporting
+#: order: a reader should meet the errors that change meaning before the ones
+#: that change only layout.
+WORD_FAULTS = ("misread", "one_char", "missing_extra", "spacing")
+
+
+def word_error_composition(truth: str, hypothesis: str) -> dict[str, int]:
+    """What the wrong words are wrong about.
+
+    Word error rate counts a word as failed if any character in it differs, so
+    a single lost space costs several words while costing almost no character
+    error. That makes the headline number hard to read on its own: 19% sounds
+    like one word in five was misrecognised, when on this corpus most of those
+    words have identical letters and digits and differ only in a space or a
+    full stop.
+
+    The comparison runs on :func:`normalise`d text, the same text word error
+    rate itself is scored on, so the buckets explain that number rather than a
+    different one. Punctuation and case are folded away there and so cannot
+    appear here — which is itself worth knowing: none of the residual word
+    error is a missing full stop.
+
+    So each differing run of words is classified by what actually changed:
+
+      spacing       the characters match once spaces are removed — a merge or
+                    a split, not a misreading
+      one_char      same length, exactly one character different
+      missing_extra a word dropped or invented
+      misread       everything else, and the only bucket that means the
+                    recogniser could not read the page
+
+    Returns raw counts plus ``words`` so callers can express them as shares of
+    the document rather than of each other.
+    """
+    import difflib
+
+    truth_words = normalise(truth).split()
+    hypothesis_words = normalise(hypothesis).split()
+    counts = dict.fromkeys(WORD_FAULTS, 0)
+    counts["words"] = len(truth_words)
+    if not truth_words:
+        return counts
+
+    matcher = difflib.SequenceMatcher(
+        a=[w.lower() for w in truth_words], b=[w.lower() for w in hypothesis_words]
+    )
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            continue
+        expected = truth_words[i1:i2]
+        actual = hypothesis_words[j1:j2]
+        # A run of n words against m is charged at the longer of the two: three
+        # words merged into one is three words the reader cannot search for.
+        weight = max(len(expected), len(actual))
+        joined_expected = "".join(expected)
+        joined_actual = "".join(actual)
+        alnum_expected = "".join(c for c in joined_expected if c.isalnum()).lower()
+        alnum_actual = "".join(c for c in joined_actual if c.isalnum()).lower()
+
+        if joined_expected.lower() == joined_actual.lower():
+            counts["spacing"] += weight
+        elif alnum_expected == alnum_actual:
+            counts["punctuation"] += weight
+        elif not expected or not actual:
+            counts["missing_extra"] += weight
+        elif len(joined_expected) == len(joined_actual) and (
+            sum(1 for a, b in zip(joined_expected, joined_actual, strict=True) if a != b) <= 1
+        ):
+            counts["one_char"] += weight
+        else:
+            counts["misread"] += weight
+    return counts
+
+
 def classification_summary(pairs: list[tuple[str, str]]) -> ConfusionSummary:
     """Accuracy plus where the errors actually go.
 
