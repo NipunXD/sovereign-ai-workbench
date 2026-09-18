@@ -2,6 +2,7 @@
 name = "workbench-monorepo"
 version = "0.1.0"
 description = "Sovereign On-Premise Agentic AI Workbench — air-gapped agentic RAG for industrial documents"
+license = "MIT"
 requires-python = ">=3.12,<3.13"
 dependencies = []
 

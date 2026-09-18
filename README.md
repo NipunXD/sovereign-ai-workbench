@@ -286,4 +286,4 @@ code never names a physical model; it asks for a lane.
 
 ## License
 
-Not currently licensed for redistribution.
+[MIT](LICENSE) © 2026 Nipun Arora
