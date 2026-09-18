@@ -1,7 +1,7 @@
 [project]
 name = "workbench-monorepo"
 version = "0.1.0"
-description = "Sovereign On-Premise Agentic AI Workbench — SIH 2026 PS 26117 (MRPL), Team AIDUO"
+description = "Sovereign On-Premise Agentic AI Workbench — air-gapped agentic RAG for industrial documents"
 requires-python = ">=3.12,<3.13"
 dependencies = []
 

@@ -301,7 +301,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         title=settings.app_name,
         version=__version__,
         description=(
-            "Sovereign On-Premise Agentic AI Workbench — SIH 2026 PS 26117 (MRPL). "
+            "Sovereign On-Premise Agentic AI Workbench. "
             "All inference runs on local open-weight models; no external AI service "
             "is contacted."
         ),

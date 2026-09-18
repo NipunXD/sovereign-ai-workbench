@@ -88,11 +88,11 @@ export default function LoginPage() {
               <span className="brand-mark flex h-6 w-6 items-center justify-center rounded text-2xs font-bold text-accent-fg">
                 MW
               </span>
-              <span>Smart India Hackathon 2026</span>
+              <span>Sovereign AI Workbench</span>
               <span aria-hidden>·</span>
-              <span>PS 26117</span>
+              <span>On-premise</span>
               <span aria-hidden>·</span>
-              <span>Team AIDUO</span>
+              <span>Air-gapped</span>
             </p>
 
             <h1 className="text-4xl font-semibold leading-[1.08] tracking-tight sm:text-[2.75rem]">

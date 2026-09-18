@@ -1,5 +1,5 @@
 # =============================================================================
-# Sovereign On-Premise Agentic AI Workbench — SIH 2026 PS 26117 (MRPL)
+# Sovereign On-Premise Agentic AI Workbench
 #
 #   make bootstrap    one-time setup: deps, models, infra, database, seed data
 #   make dev          run everything (infra + api + worker + web)

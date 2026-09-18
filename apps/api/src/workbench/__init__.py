@@ -1,7 +1,6 @@
 """Sovereign On-Premise Agentic AI Workbench.
 
-An air-gapped agentic AI platform for confidential industrial work, built for
-SIH 2026 problem statement 26117 (MRPL).
+An air-gapped agentic AI platform for confidential industrial work.
 
 Layering (enforced by import-linter, see the root pyproject.toml):
 

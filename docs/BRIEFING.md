@@ -1,6 +1,4 @@
-# Viva brief — Sovereign AI Workbench
-
-SIH 2026 · PS 26117 · Team AIDUO · Client MRPL
+# Briefing — Sovereign AI Workbench
 
 Short spoken answers. Everything here is true of the running system.
 

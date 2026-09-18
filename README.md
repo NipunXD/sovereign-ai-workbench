@@ -2,8 +2,8 @@
 
 **An agentic AI workbench for confidential industrial work, running entirely inside the plant.**
 
-Smart India Hackathon 2026 · Problem statement 26117 · Team AIDUO
-Client: Mangalore Refinery and Petrochemicals Limited (MRPL)
+Built against a refinery's document set: inspection reports, P&IDs, SOPs,
+maintenance logs.
 
 Open-weight models, local inference, no external API calls — not as a
 configuration option, but as a property the system can demonstrate on demand.
@@ -286,4 +286,4 @@ code never names a physical model; it asks for a lane.
 
 ## License
 
-Built for SIH 2026. Not currently licensed for redistribution.
+Not currently licensed for redistribution.

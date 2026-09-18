@@ -445,7 +445,7 @@ def main() -> int:
     args = parser.parse_args()
 
     print(f"{BOLD}Sovereign On-Premise Agentic AI Workbench{RESET}")
-    print(f"{DIM}MRPL · problem statement 26117 · {args.base_url}{RESET}")
+    print(f"{DIM}{args.base_url}{RESET}")
 
     demo = Demo(
         base_url=args.base_url,
